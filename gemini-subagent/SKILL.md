@@ -26,13 +26,16 @@ Use `flash` for speed; use `pro` when quality matters most.
 
 ## Choosing execution mode
 
-**Direct headless** — use when:
-- Task is self-contained and completes in under ~2 minutes
-- You need the result before proceeding
+**Default: always use tmux.** It returns in ~14ms, runs Gemini independently, and avoids blocking Claude's Bash tool.
 
-**Tmux background session** — use when:
-- Task may run longer than 2 minutes
-- You want to continue working while Gemini runs
+**Direct headless** — only use when:
+- Task is trivially fast (simple Q&A, no file I/O) AND
+- You need the result inline before any further steps
+
+**Tmux background session** — use for everything else:
+- Any task that reads/writes files or runs shell commands
+- Long-running tasks
+- Parallel execution while Claude continues working
 
 ---
 
