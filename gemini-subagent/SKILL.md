@@ -269,22 +269,34 @@ gemini --resume "$SESSION_ID" -p "next question" --yolo --output-format json 2>/
 
 ## Parallel execution patterns
 
-### Multiple Gemini agents
+### Multiple Gemini agents in parallel
+
+Spawn each agent in its own tmux session. All sessions start simultaneously and run independently.
 
 ```bash
-LOG1="/tmp/gemini-task-1.log"
-LOG2="/tmp/gemini-task-2.log"
+TS=$(date +%s)
+S1="gemini-${TS}-1"; L1="/tmp/${S1}.log"; D1="${L1}.done"
+S2="gemini-${TS}-2"; L2="/tmp/${S2}.log"; D2="${L2}.done"
 
-gemini -m flash -p "TASK 1" --yolo --output-format json 2>/dev/null > "$LOG1" &
-PID1=$!
-gemini -m flash -p "TASK 2" --yolo --output-format json 2>/dev/null > "$LOG2" &
-PID2=$!
+# Spawn all agents at once
+tmux new-session -d -s "$S1"
+tmux send-keys -t "$S1" \
+  "gemini -m flash -p 'TASK 1' --yolo --output-format json > '$L1' 2>/dev/null; touch '$D1'" C-m
 
-wait $PID1 $PID2
+tmux new-session -d -s "$S2"
+tmux send-keys -t "$S2" \
+  "gemini -m flash -p 'TASK 2' --yolo --output-format json > '$L2' 2>/dev/null; touch '$D2'" C-m
 
-echo "=== Agent 1 ===" && jq -r '.response' "$LOG1"
-echo "=== Agent 2 ===" && jq -r '.response' "$LOG2"
-rm -f "$LOG1" "$LOG2"
+# Wait for all to finish
+while [ ! -f "$D1" ] || [ ! -f "$D2" ]; do sleep 2; done
+
+# Collect results
+echo "=== Agent 1 ===" && jq -r '.response' "$L1"
+echo "=== Agent 2 ===" && jq -r '.response' "$L2"
+
+# Cleanup
+tmux kill-session -t "$S1" 2>/dev/null; rm -f "$L1" "$D1"
+tmux kill-session -t "$S2" 2>/dev/null; rm -f "$L2" "$D2"
 ```
 
 ### Claude + Gemini in parallel
@@ -297,7 +309,7 @@ tmux new-session -d -s "$SESSION"
 tmux send-keys -t "$SESSION" \
   "gemini -m flash -p 'TASK' --yolo --output-format json > '$LOG' 2>/dev/null; touch '$DONE_MARKER'" C-m
 
-# ... do your own work here ...
+# ... Claude does its own work here ...
 
 while [ ! -f "$DONE_MARKER" ]; do sleep 2; done
 jq -r '.response' "$LOG"
