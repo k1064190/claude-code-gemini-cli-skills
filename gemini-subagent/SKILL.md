@@ -287,10 +287,12 @@ tmux new-session -d -s "$S2"
 tmux send-keys -t "$S2" \
   "gemini -m flash -p 'TASK 2' --yolo --output-format json > '$L2' 2>/dev/null; touch '$D2'" C-m
 
-# Wait for all to finish
-while [ ! -f "$D1" ] || [ ! -f "$D2" ]; do sleep 2; done
+# Check status (separate Bash call — repeat until both DONE)
+echo "Agent 1: $([ -f "$D1" ] && echo DONE || echo RUNNING)"
+echo "Agent 2: $([ -f "$D2" ] && echo DONE || echo RUNNING)"
 
-# Collect results
+# Collect results once both DONE (blocking wait is fine — Bash timeout is 600min)
+while [ ! -f "$D1" ] || [ ! -f "$D2" ]; do sleep 2; done
 echo "=== Agent 1 ===" && jq -r '.response' "$L1"
 echo "=== Agent 2 ===" && jq -r '.response' "$L2"
 
@@ -310,12 +312,24 @@ tmux send-keys -t "$SESSION" \
   "gemini -m flash -p 'TASK' --yolo --output-format json > '$LOG' 2>/dev/null; touch '$DONE_MARKER'" C-m
 
 # ... Claude does its own work here ...
+```
 
+When Claude's work is done and the result is needed, collect it in a separate Bash call:
+
+```bash
+# If result needed immediately — block until done (safe: Bash timeout is 600min)
 while [ ! -f "$DONE_MARKER" ]; do sleep 2; done
 jq -r '.response' "$LOG"
 tmux kill-session -t "$SESSION" 2>/dev/null
 rm -f "$LOG" "$DONE_MARKER"
 ```
+
+```bash
+# If result not yet needed — non-blocking check, come back later
+[ -f "$DONE_MARKER" ] && echo "DONE" || echo "STILL RUNNING"
+```
+
+> The tmux session runs independently of any Bash call. Even if a polling loop times out, Gemini keeps running inside tmux. Check the marker file again in a new Bash call to collect the result.
 
 ---
 
