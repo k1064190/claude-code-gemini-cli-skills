@@ -287,7 +287,8 @@ tmux new-session -d -s "$S2"
 tmux send-keys -t "$S2" \
   "gemini -m flash -p 'TASK 2' --yolo --output-format json > '$L2' 2>/dev/null; touch '$D2'" C-m
 
-# Wait silently — no output until all done (avoids token waste from repeated status lines)
+# NEVER put echo or any output inside the while loop — it generates repeated lines that waste tokens.
+# Wait silently. Only output once, after the loop exits.
 while [ ! -f "$D1" ] || [ ! -f "$D2" ]; do sleep 3; done
 echo "ALL DONE"
 echo "=== Agent 1 ===" && jq -r '.response' "$L1"
@@ -314,7 +315,7 @@ tmux send-keys -t "$SESSION" \
 When Claude's work is done and the result is needed, collect it in a separate Bash call:
 
 ```bash
-# Wait silently until done, then collect (no status echo inside loop — avoids token waste)
+# NEVER put echo or any output inside the while loop — silent wait only.
 while [ ! -f "$DONE_MARKER" ]; do sleep 3; done
 echo "DONE"
 jq -r '.response' "$LOG"
