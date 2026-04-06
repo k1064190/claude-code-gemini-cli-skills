@@ -9,7 +9,7 @@ Claude Code skills for delegating tasks to Google Gemini CLI as a subagent.
 Delegate tasks from Claude to Gemini CLI running as an independent agent. Useful for:
 
 - **Large codebase analysis** — Gemini's massive context window handles entire repos that overflow Claude's context
-- **Parallel execution** — Run Gemini in a tmux background session while Claude continues working
+- **Parallel execution** — Run multiple Gemini instances concurrently via parallel Bash calls
 - **Google Search grounding** — Leverage Gemini's built-in web search
 - **Second opinion** — Compare results from two different AI models
 
@@ -17,7 +17,7 @@ Delegate tasks from Claude to Gemini CLI running as an independent agent. Useful
 
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli) installed and authenticated
 - `jq` for JSON parsing
-- `tmux` for background execution
+- `tmux` (optional — only needed for explicit background execution)
 
 ```bash
 # Install Gemini CLI
@@ -73,7 +73,19 @@ gemini -m flash -p "TASK" --yolo --output-format json 2>/dev/null | jq -r '.resp
 
 `--output-format json` separates the final answer from intermediate tool-call narrations. `.response` contains only the model's conclusion.
 
-### Background execution with tmux
+### Parallel execution
+
+Run multiple Gemini instances by sending multiple Bash tool calls in a single response:
+
+```bash
+# Call 1 (runs concurrently with Call 2):
+gemini -m flash -p "TASK 1" --yolo --output-format json 2>/dev/null | jq -r '.response'
+
+# Call 2 (runs concurrently with Call 1):
+gemini -m flash -p "TASK 2" --yolo --output-format json 2>/dev/null | jq -r '.response'
+```
+
+### Background execution with tmux (when explicitly requested)
 
 ```bash
 SESSION="gemini-$(date +%s)"
@@ -86,13 +98,11 @@ tmux send-keys -t "$SESSION" \
 
 # Claude continues working here...
 
-# Check and collect result
+# Check and collect result later
 [ -f "$DONE_MARKER" ] && jq -r '.response' "$LOG"
 tmux kill-session -t "$SESSION" 2>/dev/null
 rm -f "$LOG" "$DONE_MARKER"
 ```
-
-> **Why tmux instead of `&`?** Claude Code's Bash tool blocks on background processes started with `&`. `tmux new-session -d` returns in ~14ms and the work runs independently.
 
 ### Pass files with `@` syntax
 

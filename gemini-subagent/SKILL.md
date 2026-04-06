@@ -26,16 +26,20 @@ Use `flash` for speed; use `pro` when quality matters most.
 
 ## Choosing execution mode
 
-**Default: always use tmux.** It returns in ~14ms, runs Gemini independently, and avoids blocking Claude's Bash tool.
+**Default: direct bash execution.** Run Gemini directly in the Bash tool. Simple, reliable, and the output is immediately available.
 
-**Direct headless** — only use when:
-- Task is trivially fast (simple Q&A, no file I/O) AND
-- You need the result inline before any further steps
+**Direct headless** — use for all normal tasks:
+- Q&A, summarization, code generation
+- File reads/writes, shell commands
+- Any task where you wait for the result before proceeding
 
-**Tmux background session** — use for everything else:
-- Any task that reads/writes files or runs shell commands
-- Long-running tasks
-- Parallel execution while Claude continues working
+**Parallel execution** — use multiple Bash tool calls in a single response:
+- Each Bash call runs a separate `gemini` command simultaneously
+- Results come back independently — no polling or marker files needed
+
+**Tmux background session** — use ONLY when the user explicitly asks to run something in the background:
+- User says "run this in the background", "background task", "don't wait for it"
+- Very long-running tasks where the user wants Claude to continue other work while Gemini runs
 
 ---
 
@@ -124,7 +128,9 @@ gemini -m pro -p "Working directory: /home/cwh/project. Read src/main.py and wri
 
 ---
 
-## Mode 2: Tmux background session
+## Mode 2: Tmux background session (only when explicitly requested)
+
+Use this mode **only** when the user explicitly asks to run Gemini in the background.
 
 ### Start the session
 
@@ -271,35 +277,25 @@ gemini --resume "$SESSION_ID" -p "next question" --yolo --output-format json 2>/
 
 ### Multiple Gemini agents in parallel
 
-Spawn each agent in its own tmux session. All sessions start simultaneously and run independently.
+Use multiple Bash tool calls in a single response. Each call runs independently and returns its own result — no tmux, no polling, no marker files.
 
-```bash
-TS=$(date +%s)
-S1="gemini-${TS}-1"; L1="/tmp/${S1}.log"; D1="${L1}.done"
-S2="gemini-${TS}-2"; L2="/tmp/${S2}.log"; D2="${L2}.done"
+```
+# Bash call 1 (runs simultaneously with call 2):
+gemini -m flash -p "TASK 1" --yolo --output-format json 2>/dev/null | jq -r '.response'
 
-# Spawn all agents at once
-tmux new-session -d -s "$S1"
-tmux send-keys -t "$S1" \
-  "gemini -m flash -p 'TASK 1' --yolo --output-format json > '$L1' 2>/dev/null; touch '$D1'" C-m
-
-tmux new-session -d -s "$S2"
-tmux send-keys -t "$S2" \
-  "gemini -m flash -p 'TASK 2' --yolo --output-format json > '$L2' 2>/dev/null; touch '$D2'" C-m
-
-# NEVER put echo or any output inside the while loop — it generates repeated lines that waste tokens.
-# Wait silently. Only output once, after the loop exits.
-while [ ! -f "$D1" ] || [ ! -f "$D2" ]; do sleep 3; done
-echo "ALL DONE"
-echo "=== Agent 1 ===" && jq -r '.response' "$L1"
-echo "=== Agent 2 ===" && jq -r '.response' "$L2"
-
-# Cleanup
-tmux kill-session -t "$S1" 2>/dev/null; rm -f "$L1" "$D1"
-tmux kill-session -t "$S2" 2>/dev/null; rm -f "$L2" "$D2"
+# Bash call 2 (runs simultaneously with call 1):
+gemini -m flash -p "TASK 2" --yolo --output-format json 2>/dev/null | jq -r '.response'
 ```
 
+> Send both Bash tool calls in the **same message**. The harness runs them concurrently.
+
 ### Claude + Gemini in parallel
+
+Start Gemini in one Bash call while Claude does its own work (e.g., reading files, editing code) in other tool calls within the same message. All tool calls in a single response execute concurrently.
+
+### Background execution (only when user explicitly requests)
+
+If the user says "run in the background" or "don't wait for it", use tmux:
 
 ```bash
 SESSION="gemini-$(date +%s)"
@@ -308,11 +304,10 @@ DONE_MARKER="${LOG}.done"
 tmux new-session -d -s "$SESSION"
 tmux send-keys -t "$SESSION" \
   "gemini -m flash -p 'TASK' --yolo --output-format json > '$LOG' 2>/dev/null; touch '$DONE_MARKER'" C-m
-
-# ... Claude does its own work here ...
+echo "Session: $SESSION | Log: $LOG"
 ```
 
-When Claude's work is done and the result is needed, collect it in a separate Bash call:
+Collect result later:
 
 ```bash
 # NEVER put echo or any output inside the while loop — silent wait only.
@@ -322,13 +317,6 @@ jq -r '.response' "$LOG"
 tmux kill-session -t "$SESSION" 2>/dev/null
 rm -f "$LOG" "$DONE_MARKER"
 ```
-
-```bash
-# If result not yet needed — non-blocking check, come back later
-[ -f "$DONE_MARKER" ] && echo "DONE" || echo "STILL RUNNING"
-```
-
-> The tmux session runs independently of any Bash call. Even if a polling loop times out, Gemini keeps running inside tmux. Check the marker file again in a new Bash call to collect the result.
 
 ---
 
