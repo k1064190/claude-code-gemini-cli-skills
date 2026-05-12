@@ -11,16 +11,12 @@ Spawn and communicate with a Gemini CLI agent to execute tasks independently. Ge
 
 ## Choosing a model
 
-**Default (omit `--model`):** Gemini auto-selects the best model using `auto-gemini-3` routing. This is usually the right choice.
+**Default: always invoke with `-m pro`** (resolves to `gemini-3.1-pro-preview`). Pass `-m pro` on every Gemini call unless the user explicitly asks for a different model — e.g., "use flash", "switch to flash", or names a specific model by flag/version. Do not silently downgrade to `flash` to save time or tokens; quality is the default.
 
-**Explicit model selection** — use `-m pro` or `-m flash`:
-
-| Task type | Flag | Resolves to |
-|-----------|------|-------------|
-| Simple: Q&A, summarization, quick code gen | `-m flash` | `gemini-3-flash-preview` |
-| Complex: multi-step reasoning, architecture, analysis | `-m pro` | `gemini-3.1-pro-preview` |
-
-Use `flash` for speed; use `pro` when quality matters most.
+| Flag | Resolves to | When to use |
+|------|-------------|-------------|
+| `-m pro` | `gemini-3.1-pro-preview` | **Default for every task.** |
+| `-m flash` | `gemini-3-flash-preview` | Only when the user explicitly requests flash/speed. |
 
 ---
 
