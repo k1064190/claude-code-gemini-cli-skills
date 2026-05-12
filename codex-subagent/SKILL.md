@@ -1,5 +1,5 @@
 ---
-name: codex
+name: codex-subagent
 description: Use when the user asks to run Codex CLI (codex exec, codex resume) or references OpenAI Codex for code analysis, refactoring, or automated editing
 ---
 
@@ -8,15 +8,14 @@ description: Use when the user asks to run Codex CLI (codex exec, codex resume) 
 ## Running a Task
 1. **Default: model `gpt-5.5` with reasoning effort `high`.** Use these for every task unless the user has explicitly specified a different model or reasoning effort (e.g., "use gpt-5.4-mini", "run with effort xhigh"). Only call `AskUserQuestion` to confirm/collect a non-default choice when the user signals they want one. Available models: `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex-spark`, `gpt-5.3-codex`. Available reasoning efforts: `xhigh`, `high`, `medium`, `low`.
 2. Select the sandbox mode required for the task; default to `--sandbox read-only` unless edits or network access are necessary.
-3. Assemble the command with the appropriate options:
+3. Assemble the command with the appropriate options. `--skip-git-repo-check` is always required:
    - `-m, --model <MODEL>`
    - `--config model_reasoning_effort="<xhigh|high|medium|low>"`
    - `--sandbox <read-only|workspace-write|danger-full-access>`
    - `--full-auto`
    - `-C, --cd <DIR>`
-   - `--skip-git-repo-check`
+   - `--skip-git-repo-check` (required on every invocation)
    - `"your prompt here"` (as final positional argument)
-3. Always use --skip-git-repo-check.
 4. When continuing a previous session, use `codex exec --skip-git-repo-check resume --last` via stdin. When resuming don't use any configuration flags unless explicitly requested by the user e.g. if he species the model or the reasoning effort when requesting to resume a session. Resume syntax: `echo "your prompt here" | codex exec --skip-git-repo-check resume --last 2>/dev/null`. All flags have to be inserted between exec and resume.
 5. **IMPORTANT**: By default, append `2>/dev/null` to all `codex exec` commands to suppress thinking tokens (stderr). Only show stderr if the user explicitly requests to see thinking tokens or if debugging is needed.
 6. Run the command, capture stdout/stderr (filtered as appropriate), and summarize the outcome for the user.
