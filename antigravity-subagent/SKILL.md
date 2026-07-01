@@ -11,6 +11,29 @@ Spawn and communicate with a Google Antigravity CLI (`agy`) agent to execute tas
 
 ---
 
+## Avoiding hangs and silent failures (read first)
+
+Two failure modes make an `agy -p` call look like it "never responds / freezes." Both are avoidable:
+
+1. **Redirect stdin on every `-p` call: `< /dev/null`.** Like `codex exec`, `agy -p` reads stdin whenever stdin is not a TTY. If the harness hands the process an open pipe that never delivers bytes or EOF, `agy` blocks **forever** and prints nothing. Verified: `sleep 100 | agy -p "hi"` hangs until killed; the same command with `< /dev/null` returns immediately. **Append `< /dev/null` to every `-p` invocation in this guide** — initial calls, `@`-syntax calls, and `-c`/`--conversation` resumes alike. (The tmux mode runs inside a pty, so its stdin is already a TTY and does not need this.)
+2. **Don't black-hole stderr with `2>/dev/null`.** Capture it: `ERRLOG=$(mktemp)` then `2>"$ERRLOG"`. On a clean run the log is just startup noise you ignore; on a non-zero exit or empty stdout, `cat "$ERRLOG"` reveals the real cause (not authenticated, model string typo, timeout). Silently discarding stderr is what turns a plain failure into a mystery "freeze."
+   > **Standing convention:** every `$ERRLOG` in the snippets below assumes you ran `ERRLOG=$(mktemp)` once at the start of your shell session. A `2>"$ERRLOG"` with `ERRLOG` unset fails with an *empty-filename* error and the command never runs — so if you copy a single snippet in isolation, define `ERRLOG` first (or substitute `2>/dev/null`).
+3. **`--print-timeout` defaults to 5m and cuts off silently.** For long tasks raise it (`--print-timeout 15m`); also keep an outer `timeout -k 10 <N>` wall-clock cap so the call **cannot** hang indefinitely — the `<N>` sends SIGTERM and `-k 10` follows with SIGKILL 10 s later for a process that ignores SIGTERM. Treat **exit 124 as "timed out"** and **137 as "force-killed."** (Verified: this survives command substitution — `RESULT=$(timeout -k 10 600 agy …)` returns at the cap, so a slow model is bounded, never a 5-hour hang.)
+
+Canonical safe invocation (use this shape everywhere below):
+
+```bash
+ERRLOG=$(mktemp)
+RESULT=$(timeout -k 10 600 agy --model "Gemini 3.1 Pro (High)" -p "TASK PROMPT" < /dev/null 2>"$ERRLOG")
+rc=$?   # not `status`: that name is read-only in fish/zsh
+if [ "$rc" -ne 0 ] || [ -z "$RESULT" ]; then echo "agy failed (exit $rc):"; cat "$ERRLOG"; fi
+rm -f "$ERRLOG"
+```
+
+> **Edits land in a scratch sandbox unless you pass `--dangerously-skip-permissions`.** In `-p` mode without it, `agy` runs agentic file writes in an isolated workspace (`~/.gemini/antigravity-cli/scratch/…`), **not** your project — so the user's files appear unchanged even though `agy` reported success. For any task that must modify real project files, pass `--dangerously-skip-permissions` (and `--add-dir <DIR>` for paths outside the cwd). Read-only analysis via `@` syntax does not need it.
+
+---
+
 ## Choosing a model
 
 `agy models` lists the exact, currently-installed model strings. Pass them **verbatim** (with the parenthetical suffix, quoted) to `--model`.
@@ -35,10 +58,11 @@ Spawn and communicate with a Google Antigravity CLI (`agy`) agent to execute tas
 Unlike the old Gemini CLI, **`agy --print` writes the final answer as plain text to stdout** — there is no `--output-format json` flag and no `jq` step. Capture stdout directly.
 
 ```bash
-RESULT=$(agy --model "Gemini 3.1 Pro (High)" -p "TASK PROMPT" 2>/dev/null)
+ERRLOG=$(mktemp)
+RESULT=$(agy --model "Gemini 3.1 Pro (High)" -p "TASK PROMPT" < /dev/null 2>"$ERRLOG")
 ```
 
-> `2>/dev/null` suppresses startup/log noise on stderr, leaving only the model's answer on stdout.
+> `< /dev/null` prevents the stdin hang (see [Avoiding hangs](#avoiding-hangs-and-silent-failures-read-first)); `2>"$ERRLOG"` keeps startup/log noise off stdout while preserving the error text for when something goes wrong.
 
 ---
 
@@ -61,10 +85,11 @@ RESULT=$(agy --model "Gemini 3.1 Pro (High)" -p "TASK PROMPT" 2>/dev/null)
 
 ```bash
 # Read-only / analysis (no tool approvals needed for @-included files)
-agy --model "Gemini 3.1 Pro (High)" -p "TASK PROMPT" 2>/dev/null
+agy --model "Gemini 3.1 Pro (High)" -p "TASK PROMPT" < /dev/null 2>"$ERRLOG"
 
-# Agentic: let agy run tools (write files, run shell). Auto-approve every tool request:
-agy --model "Gemini 3.1 Pro (High)" -p "TASK PROMPT" --dangerously-skip-permissions 2>/dev/null
+# Agentic: let agy run tools (write files, run shell) IN YOUR REAL WORKSPACE.
+# Without --dangerously-skip-permissions the edits go to a scratch sandbox, not your project.
+agy --model "Gemini 3.1 Pro (High)" -p "TASK PROMPT" --dangerously-skip-permissions < /dev/null 2>"$ERRLOG"
 ```
 
 Flags that matter for subagent use:
@@ -88,7 +113,7 @@ Flags that matter for subagent use:
 ```bash
 agy --model "Gemini 3.1 Pro (High)" \
   -p "Working directory: /home/cwh/project. Read src/main.py and write unit tests for all functions. Save tests to tests/test_main.py" \
-  --dangerously-skip-permissions 2>/dev/null
+  --dangerously-skip-permissions < /dev/null 2>"$ERRLOG"
 ```
 
 ---
@@ -99,16 +124,16 @@ agy --model "Gemini 3.1 Pro (High)" \
 
 ```bash
 # Single file
-agy --model "Gemini 3.1 Pro (High)" -p "@src/main.py Explain this file's purpose and structure" 2>/dev/null
+agy --model "Gemini 3.1 Pro (High)" -p "@src/main.py Explain this file's purpose and structure" < /dev/null 2>"$ERRLOG"
 
 # Multiple files
-agy --model "Gemini 3.1 Pro (High)" -p "@package.json @src/index.js Analyze the dependencies used" 2>/dev/null
+agy --model "Gemini 3.1 Pro (High)" -p "@package.json @src/index.js Analyze the dependencies used" < /dev/null 2>"$ERRLOG"
 
 # Entire directory
-agy --model "Gemini 3.1 Pro (High)" -p "@src/ Summarize the architecture of this codebase" 2>/dev/null
+agy --model "Gemini 3.1 Pro (High)" -p "@src/ Summarize the architecture of this codebase" < /dev/null 2>"$ERRLOG"
 
 # Whole project
-agy --model "Gemini 3.1 Pro (High)" -p "@./ Give me an overview of this entire project" 2>/dev/null
+agy --model "Gemini 3.1 Pro (High)" -p "@./ Give me an overview of this entire project" < /dev/null 2>"$ERRLOG"
 ```
 
 ### Large codebase analysis
@@ -117,8 +142,8 @@ Antigravity's large context can absorb whole codebases that overflow Claude's co
 
 ```bash
 cd /path/to/project
-agy --model "Gemini 3.1 Pro (High)" -p "@src/ @lib/ Has dark mode been implemented? Show relevant files and functions" 2>/dev/null
-agy --model "Gemini 3.1 Pro (High)" -p "@src/ @api/ Are SQL injection protections in place? Show how user inputs are sanitized" 2>/dev/null
+agy --model "Gemini 3.1 Pro (High)" -p "@src/ @lib/ Has dark mode been implemented? Show relevant files and functions" < /dev/null 2>"$ERRLOG"
+agy --model "Gemini 3.1 Pro (High)" -p "@src/ @api/ Are SQL injection protections in place? Show how user inputs are sanitized" < /dev/null 2>"$ERRLOG"
 ```
 
 You can also widen the agent's writable workspace with `--add-dir` (repeatable) for agentic, multi-directory tasks.
@@ -166,13 +191,13 @@ rm -f "$LOG" "$DONE_MARKER"
 
 ```bash
 # First call (starts a conversation):
-agy --model "Gemini 3.1 Pro (High)" -p "initial task" --dangerously-skip-permissions 2>/dev/null
+agy --model "Gemini 3.1 Pro (High)" -p "initial task" --dangerously-skip-permissions < /dev/null 2>"$ERRLOG"
 
 # Follow-up on the MOST RECENT conversation:
-agy -c -p "follow-up question" --dangerously-skip-permissions 2>/dev/null
+agy -c -p "follow-up question" --dangerously-skip-permissions < /dev/null 2>"$ERRLOG"
 
 # Resume a SPECIFIC conversation by ID:
-agy --conversation <ID> -p "follow-up question" --dangerously-skip-permissions 2>/dev/null
+agy --conversation <ID> -p "follow-up question" --dangerously-skip-permissions < /dev/null 2>"$ERRLOG"
 ```
 
 > When resuming with `-c`/`--conversation`, the model and settings from the original conversation carry over — don't re-pass `--model` unless the user explicitly wants to switch.
@@ -182,8 +207,8 @@ agy --conversation <ID> -p "follow-up question" --dangerously-skip-permissions 2
 ## Error handling and timeouts
 
 ```bash
-# Hard wall-clock cap (exit 124 = timed out). Also tune agy's own wait with --print-timeout.
-timeout 180 agy --model "Gemini 3.1 Pro (High)" -p "TASK" --print-timeout 150s 2>/dev/null
+# Hard wall-clock cap (124 = SIGTERM/timed out, 137 = SIGKILL after -k grace). Also tune agy's own wait with --print-timeout.
+timeout -k 10 180 agy --model "Gemini 3.1 Pro (High)" -p "TASK" --print-timeout 150s < /dev/null 2>"$ERRLOG"
 
 # Watchdog for tmux sessions
 sleep 180 && tmux kill-session -t "$SESSION" 2>/dev/null &
@@ -193,6 +218,10 @@ kill $WATCHDOG_PID 2>/dev/null
 ```
 
 Common failure causes:
+- **Command hangs / no output at all** → stdin was left unmanaged. Add `< /dev/null` (see [Avoiding hangs](#avoiding-hangs-and-silent-failures-read-first)). This is the single most common cause of "agy froze."
+- **`agy` reported success but the project files are unchanged** → the run wrote to the scratch sandbox because `--dangerously-skip-permissions` was missing. Re-run with it (and `--add-dir` if needed).
+- **Exit 124 (SIGTERM) or 137 (SIGKILL after `-k` grace)** → the outer `timeout` fired (or `--print-timeout` is too low for the task). Raise the cap; don't blindly retry. This is the guarantee that a slow run ends in minutes, not hours.
+- **Empty stdout, non-zero exit** → `cat "$ERRLOG"` for the real error (auth, bad model string, network).
 - `agy: command not found` in a fresh shell → `~/.local/bin` not on PATH. Run `agy install`, or add `~/.local/bin` to PATH, then open a new terminal.
 - Calling `antigravity` instead of `agy` → the binary is `agy`.
 - Not authenticated → run `agy` interactively once to sign in, then retry headless.
@@ -228,10 +257,10 @@ Send multiple Bash tool calls in a **single** response. Each runs independently 
 
 ```bash
 # Bash call 1 (runs simultaneously with call 2):
-agy --model "Gemini 3.1 Pro (High)" -p "TASK 1" 2>/dev/null
+agy --model "Gemini 3.1 Pro (High)" -p "TASK 1" < /dev/null 2>"$ERRLOG"
 
 # Bash call 2 (runs simultaneously with call 1):
-agy --model "Gemini 3.1 Pro (High)" -p "TASK 2" 2>/dev/null
+agy --model "Gemini 3.1 Pro (High)" -p "TASK 2" < /dev/null 2>"$ERRLOG2"
 ```
 
 ### Claude + `agy` in parallel
