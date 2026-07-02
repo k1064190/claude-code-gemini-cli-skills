@@ -42,19 +42,33 @@ and the installed CLIs' own `--help`.
   error-handling examples updated; canonical block.
 
 ## Review loop
-- `code-reviewer-pro` subagent + `codex` review (dogfooding the fixed pattern) both ran on the
-  diff. Convergent findings, all addressed: undefined `$ERRLOG` in inline snippets (hard bash
-  failure — verified `2>"$UNSET"` errors) → added an explicit standing-convention note;
-  parallel-block stderr inconsistency → aligned; `status` var collides with fish/zsh read-only
-  `$status` → renamed to `rc`; resume "no flags" claim → corrected after checking `resume --help`.
-- Dismissed: codex's claim that `echo "p" | codex exec resume --last` needs `-` — TEST 5
-  proved the piped text is used as the resumed prompt on codex 0.139.0.
-- The `agy` review was left in the pool and stopped early; agy was already dogfooded
-  successfully elsewhere, and its `< /dev/null` run started (did not hang) — it was just slow
-  reasoning, bounded by the outer `timeout`.
+Three reviewers per CLAUDE.md: `code-reviewer-pro` subagent, `codex` (GitHub bot on PR #3), and
+`antigravity-subagent`/`agy`.
+
+- **Round 1 (code-reviewer-pro + codex):** convergent findings addressed — undefined `$ERRLOG` in
+  inline snippets (hard bash failure — verified `2>"$UNSET"` errors) → standing-convention note;
+  parallel-block stderr inconsistency → aligned; `status` collides with fish/zsh read-only
+  `$status` → renamed `rc`; resume "no flags" claim → corrected via `resume --help`. Codex bot P2
+  on parallel `$ERRLOG` → made each parallel call self-contained. **Dismissed with evidence:**
+  codex `--add-dir` P2 (TEST: `--dangerously-skip-permissions` alone lands edits in the real cwd)
+  and codex's `resume` stdin `-` claim (TEST 5: piped text is used as the resumed prompt).
+- **Round 2 (agy review):** running agy on the diff surfaced two *real* defects I introduced —
+  (a) the positional resume form `resume --last "prompt"` lacked `< /dev/null` (same stdin hang);
+  (b) resume examples still used `2>/dev/null`, contradicting the capture-stderr rule. Both fixed.
+- **The big one — `agy` "review takes 40 minutes" hang.** Running agy with `@final.diff` from a
+  scratch dir made agy's agent launch `find /home/cwh -name final.diff` (a full `$HOME` scan) to
+  locate the file. `timeout -k` killed `agy` but not that grandchild, which inherited the
+  `RESULT=$(…)` pipe's write end and kept command substitution blocked for ~40 min. Root cause
+  confirmed via `/proc/<pid>/fd` pipe-inode ownership. Two fixes: (1) **capture agy stdout to a
+  file, never `$(agy …)`** — proven with a synthetic grandchild (30 s hang via `$()` vs 0 s via
+  `> file`); (2) **don't make agy hunt for files** — inline small content or use a cwd-relative
+  `@path`. The old canonical block's "survives command substitution" claim was wrong and was
+  corrected.
 
 ## Retrospective
-The user's instinct that "even long reasoning can't take 5 hours" was the key prompt to prove
-the timeout is a *hard* bound (and to upgrade `timeout` → `timeout -k`), not just usually-works.
-Carry forward: for any "it froze" report, first check whether the process is blocked on stdin
-and whether stderr is being discarded — both turn ordinary conditions into invisible hangs.
+Two user push-backs drove the most important fixes. "Even long reasoning can't take 5 hours" →
+upgrade `timeout` to a *hard* bound (`timeout -k`). "Making agy traverse `$HOME` is nonsense" →
+found the real 40-min-hang mechanism (agentic `find` grandchild holding a command-substitution
+pipe). Carry forward: for any subagent "it froze" report, check three things — blocked on stdin,
+stderr discarded, and **a lingering agentic grandchild holding a `$(…)` pipe past the timeout**;
+capture long agentic-CLI output to a file, not command substitution.

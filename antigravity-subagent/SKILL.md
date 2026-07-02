@@ -18,17 +18,22 @@ Two failure modes make an `agy -p` call look like it "never responds / freezes."
 1. **Redirect stdin on every `-p` call: `< /dev/null`.** Like `codex exec`, `agy -p` reads stdin whenever stdin is not a TTY. If the harness hands the process an open pipe that never delivers bytes or EOF, `agy` blocks **forever** and prints nothing. Verified: `sleep 100 | agy -p "hi"` hangs until killed; the same command with `< /dev/null` returns immediately. **Append `< /dev/null` to every `-p` invocation in this guide** — initial calls, `@`-syntax calls, and `-c`/`--conversation` resumes alike. (The tmux mode runs inside a pty, so its stdin is already a TTY and does not need this.)
 2. **Don't black-hole stderr with `2>/dev/null`.** Capture it: `ERRLOG=$(mktemp)` then `2>"$ERRLOG"`. On a clean run the log is just startup noise you ignore; on a non-zero exit or empty stdout, `cat "$ERRLOG"` reveals the real cause (not authenticated, model string typo, timeout). Silently discarding stderr is what turns a plain failure into a mystery "freeze."
    > **Standing convention:** every `$ERRLOG` in the snippets below assumes you ran `ERRLOG=$(mktemp)` once at the start of your shell session. A `2>"$ERRLOG"` with `ERRLOG` unset fails with an *empty-filename* error and the command never runs — so if you copy a single snippet in isolation, define `ERRLOG` first (or substitute `2>/dev/null`).
-3. **`--print-timeout` defaults to 5m and cuts off silently.** For long tasks raise it (`--print-timeout 15m`); also keep an outer `timeout -k 10 <N>` wall-clock cap so the call **cannot** hang indefinitely — the `<N>` sends SIGTERM and `-k 10` follows with SIGKILL 10 s later for a process that ignores SIGTERM. Treat **exit 124 as "timed out"** and **137 as "force-killed."** (Verified: this survives command substitution — `RESULT=$(timeout -k 10 600 agy …)` returns at the cap, so a slow model is bounded, never a 5-hour hang.)
+3. **`--print-timeout` defaults to 5m and cuts off silently.** For long tasks raise it (`--print-timeout 15m`); also keep an outer `timeout -k 10 <N>` wall-clock cap — the `<N>` sends SIGTERM to `agy` and `-k 10` follows with SIGKILL 10 s later for a process that ignores SIGTERM. Treat **exit 124 as "timed out"** and **137 as "force-killed."** ⚠️ The cap bounds `agy` itself, but `timeout` does **not** kill agy's grandchildren — so this only guarantees the *caller* returns promptly when you capture output to a file (point 4). If you capture with `RESULT=$(agy …)` instead, a lingering agy child can hold the pipe open and defeat the timeout (that is the real "review took 40 minutes" hang). Always use the file-redirect form below.
+
+4. **Capture agy's stdout to a FILE, not with `RESULT=$(agy …)`.** `agy` is agentic: it can spawn child processes (e.g. a `find` to locate a file — see the file caveat below). A command substitution `$(…)` doesn't return until **every** process holding the pipe's write end closes it, and `timeout` kills only its direct child (`agy`), not agy's grandchildren. So an orphaned agy child keeps `$(…)` blocked for as long as *it* runs — the outer `timeout` is defeated and the call appears to hang for many minutes. Redirect to a file instead (`> "$OUT"`); a file has no pipe to hold open, so control returns the instant `timeout` fires. Verified: with a lingering grandchild, `RESULT=$(timeout 3 …)` blocked 30s; `timeout 3 … > file` returned at 3s.
 
 Canonical safe invocation (use this shape everywhere below):
 
 ```bash
-ERRLOG=$(mktemp)
-RESULT=$(timeout -k 10 600 agy --model "Gemini 3.1 Pro (High)" -p "TASK PROMPT" < /dev/null 2>"$ERRLOG")
+OUT=$(mktemp); ERRLOG=$(mktemp)
+timeout -k 10 600 agy --model "Gemini 3.1 Pro (High)" -p "TASK PROMPT" < /dev/null > "$OUT" 2>"$ERRLOG"
 rc=$?   # not `status`: that name is read-only in fish/zsh
+RESULT=$(cat "$OUT")   # read from the file — safe; a lingering agy child can't block this
 if [ "$rc" -ne 0 ] || [ -z "$RESULT" ]; then echo "agy failed (exit $rc):"; cat "$ERRLOG"; fi
-rm -f "$ERRLOG"
+rm -f "$OUT" "$ERRLOG"
 ```
+
+> **Don't make agy hunt for files — inline the content or use a cwd-relative `@path`.** If you reference a file agy can't resolve relative to its working directory, its agent may launch an expensive filesystem search to find it by name (observed: `agy -p "@some.diff …"` run from the wrong directory spawned `find /home/… -name some.diff`, which ran for ~40 min and — via the pipe trap above — hung the caller). For small inputs like a diff, paste the content straight into the prompt; for `@` inclusion, `cd` into the file's directory first and use a path that resolves from there.
 
 > **Edits land in a scratch sandbox unless you pass `--dangerously-skip-permissions`.** In `-p` mode without it, `agy` runs agentic file writes in an isolated workspace (`~/.gemini/antigravity-cli/scratch/…`), **not** your project — so the user's files appear unchanged even though `agy` reported success. For any task that must modify real project files, pass `--dangerously-skip-permissions` (and `--add-dir <DIR>` for paths outside the cwd). Read-only analysis via `@` syntax does not need it.
 
@@ -55,14 +60,15 @@ rm -f "$ERRLOG"
 
 ## Output format
 
-Unlike the old Gemini CLI, **`agy --print` writes the final answer as plain text to stdout** — there is no `--output-format json` flag and no `jq` step. Capture stdout directly.
+Unlike the old Gemini CLI, **`agy --print` writes the final answer as plain text to stdout** — there is no `--output-format json` flag and no `jq` step. Capture stdout to a **file**, then read it (not via `$(agy …)` — see the canonical block for why):
 
 ```bash
-ERRLOG=$(mktemp)
-RESULT=$(agy --model "Gemini 3.1 Pro (High)" -p "TASK PROMPT" < /dev/null 2>"$ERRLOG")
+OUT=$(mktemp); ERRLOG=$(mktemp)
+timeout -k 10 600 agy --model "Gemini 3.1 Pro (High)" -p "TASK PROMPT" < /dev/null > "$OUT" 2>"$ERRLOG"
+RESULT=$(cat "$OUT"); rm -f "$OUT" "$ERRLOG"
 ```
 
-> `< /dev/null` prevents the stdin hang (see [Avoiding hangs](#avoiding-hangs-and-silent-failures-read-first)); `2>"$ERRLOG"` keeps startup/log noise off stdout while preserving the error text for when something goes wrong.
+> `< /dev/null` prevents the stdin hang and `> "$OUT"` prevents a lingering agy child from blocking the caller (both explained in [Avoiding hangs](#avoiding-hangs-and-silent-failures-read-first)); `2>"$ERRLOG"` keeps startup/log noise off stdout while preserving the error text for when something goes wrong.
 
 ---
 

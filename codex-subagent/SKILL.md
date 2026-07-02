@@ -17,7 +17,7 @@ description: Use when the user asks to run Codex CLI (codex exec, codex resume) 
    - `"your prompt here"` (as final positional argument)
    - `< /dev/null` (redirect stdin — **required on every non-resume call**; without it the command can hang forever)
    - `2>"$ERRLOG"` where `ERRLOG=$(mktemp)` (capture stderr to a file, don't discard it)
-4. When continuing a previous session, use `codex exec --skip-git-repo-check resume --last` via stdin. When resuming don't re-pass model/reasoning-effort/sandbox unless the user explicitly wants to switch — they carry over from the original session. Resume syntax: `echo "your prompt here" | codex exec --skip-git-repo-check resume --last 2>/dev/null`. The `echo |` pipe supplies EOF, so the resume form does **not** need `< /dev/null` (verified: the piped text is used as the resumed prompt). Flag placement (per `codex exec resume --help`, signature `codex exec resume [OPTIONS] [SESSION_ID] [PROMPT]`): session-level flags like `--skip-git-repo-check` go **before** `resume`; `resume` then takes its own options (`--last`, `--all`, `-c`) and an optional positional prompt — so `codex exec --skip-git-repo-check resume --last "your prompt"` is equally valid.
+4. When continuing a previous session, use `codex exec --skip-git-repo-check resume --last` via stdin. When resuming don't re-pass model/reasoning-effort/sandbox unless the user explicitly wants to switch — they carry over from the original session. Resume syntax: `echo "your prompt here" | codex exec --skip-git-repo-check resume --last 2>"$ERRLOG"`. The `echo |` pipe supplies EOF, so this form does **not** need `< /dev/null` (verified: the piped text is used as the resumed prompt). Flag placement (per `codex exec resume --help`, signature `codex exec resume [OPTIONS] [SESSION_ID] [PROMPT]`): session-level flags like `--skip-git-repo-check` go **before** `resume`; `resume` then takes its own options (`--last`, `--all`, `-c`) and an optional positional prompt. If you use the **positional** prompt form instead of `echo |`, it has no piped EOF, so it **must** add `< /dev/null`: `codex exec --skip-git-repo-check resume --last "your prompt" < /dev/null 2>"$ERRLOG"`.
 5. **Do not black-hole stderr.** Capture it to a temp file (`2>"$ERRLOG"`) instead of `2>/dev/null`. On a clean run the stderr log holds only progress/thinking noise and you ignore it; on a non-zero exit or empty stdout you `cat "$ERRLOG"` and surface the real error (auth expired, rate limit, network). Blindly appending `2>/dev/null` is what makes a failed or hung run look like an unexplained freeze.
 6. Run the command under a wall-clock `timeout` (see [Avoiding hangs](#avoiding-hangs-and-silent-failures)), capture stdout and the stderr log, and summarize the outcome for the user.
 7. **After Codex completes**, inform the user: "You can resume this Codex session at any time by saying 'codex resume' or asking me to continue with additional analysis or changes."
@@ -50,13 +50,13 @@ Every non-resume row assumes the invocation ends with `< /dev/null 2>"$ERRLOG"` 
 | Read-only review or analysis | `read-only` | `--sandbox read-only "prompt" < /dev/null 2>"$ERRLOG"` |
 | Apply local edits | `workspace-write` | `--sandbox workspace-write "prompt" < /dev/null 2>"$ERRLOG"` |
 | Permit network or broad access | `danger-full-access` | `--sandbox danger-full-access "prompt" < /dev/null 2>"$ERRLOG"` |
-| Resume recent session | Inherited from original | `echo "prompt" \| codex exec --skip-git-repo-check resume --last 2>/dev/null` (don't re-pass model/effort; `echo \|` supplies EOF so no `< /dev/null`) |
+| Resume recent session | Inherited from original | `echo "prompt" \| codex exec --skip-git-repo-check resume --last 2>"$ERRLOG"` (don't re-pass model/effort; `echo \|` supplies EOF so no `< /dev/null`) |
 | Run from another directory | Match task needs | `-C <DIR>` plus other flags, `< /dev/null 2>"$ERRLOG"` |
 | Pipe context in deliberately | Match task needs | `git diff \| codex exec "review" 2>"$ERRLOG"` (real pipe supplies EOF; omit `< /dev/null`) |
 
 ## Following Up
 - After every `codex` command, immediately use `AskUserQuestion` to confirm next steps, collect clarifications, or decide whether to resume with `codex exec resume --last`.
-- When resuming, pipe the new prompt via stdin: `echo "new prompt" | codex exec resume --last 2>/dev/null`. The resumed session automatically uses the same model, reasoning effort, and sandbox mode from the original session.
+- When resuming, pipe the new prompt via stdin: `echo "new prompt" | codex exec resume --last 2>"$ERRLOG"`. The resumed session automatically uses the same model, reasoning effort, and sandbox mode from the original session.
 - Restate the chosen model, reasoning effort, and sandbox mode when proposing follow-up actions.
 
 ## Critical Evaluation of Codex Output
@@ -77,7 +77,7 @@ Codex is powered by OpenAI models with their own knowledge cutoffs and limitatio
 2. Provide evidence (your own knowledge, web search, docs)
 3. Optionally resume the Codex session to discuss the disagreement. **Identify yourself as Claude** so Codex knows it's a peer AI discussion. Use your actual model name (e.g., the model you are currently running as) instead of a hardcoded name:
    ```bash
-   echo "This is Claude (<your current model name>) following up. I disagree with [X] because [evidence]. What's your take on this?" | codex exec --skip-git-repo-check resume --last 2>/dev/null
+   echo "This is Claude (<your current model name>) following up. I disagree with [X] because [evidence]. What's your take on this?" | codex exec --skip-git-repo-check resume --last 2>"$ERRLOG"
    ```
 4. Frame disagreements as discussions, not corrections - either AI could be wrong
 5. Let the user decide how to proceed if there's genuine ambiguity
