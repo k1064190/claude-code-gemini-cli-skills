@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>claude-code-gemini-cli-skills — Staged plan progress</title>
+    <style>
+      :root {
+        --bg: #f7f7f5;
+        --surface: #ffffff;
+        --border: #e3e2dd;
+        --text: #2b2b28;
+        --muted: #6f6f6a;
+        --accent: #0f6f66;
+        --accent-dark: #0b544e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
+          "Malgun Gothic", "Noto Sans KR", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6;
+        padding: 2.5rem 1.5rem 4rem;
+      }
+
+      .page {
+        max-width: 880px;
+        margin: 0 auto;
+      }
+
+      header.site-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 2.5rem;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+        margin: 0 0 0.25rem;
+      }
+
+      .subtitle {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      nav.lang-switch {
+        font-size: 0.9rem;
+      }
+
+      nav.lang-switch .current {
+        color: var(--muted);
+      }
+
+      nav.lang-switch a {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      nav.lang-switch a:hover,
+      nav.lang-switch a:focus {
+        text-decoration: underline;
+      }
+
+      nav.timeline {
+        margin-bottom: 3rem;
+      }
+
+      ol.timeline-track {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        position: relative;
+        display: flex;
+      }
+
+      ol.timeline-track::before {
+        content: "";
+        position: absolute;
+        top: 9px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: var(--border);
+      }
+
+      li.timeline-node {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 96px;
+      }
+
+      .node-dot {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--surface);
+        border: 2px solid var(--border);
+      }
+
+      li.timeline-node.active .node-dot {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+
+      .node-label {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      li.timeline-node.active .node-label {
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      h2 {
+        font-size: 1.25rem;
+        color: var(--accent-dark);
+        margin: 0 0 0.5rem;
+      }
+
+      .stage-summary {
+        color: var(--muted);
+        margin: 0 0 1.75rem;
+      }
+
+      .card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 1.5rem;
+      }
+
+      article.card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1.75rem;
+      }
+
+      article.card h3 {
+        margin: 0 0 1.25rem;
+        font-size: 1.1rem;
+      }
+
+      .field {
+        margin-bottom: 1.25rem;
+      }
+
+      .field:last-child {
+        margin-bottom: 0;
+      }
+
+      .field h4 {
+        margin: 0 0 0.4rem;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--accent);
+      }
+
+      .field p,
+      .field ul {
+        margin: 0;
+      }
+
+      .field ul {
+        padding-left: 1.2rem;
+      }
+
+      .field li + li {
+        margin-top: 0.5rem;
+      }
+
+      ul.code-list {
+        list-style: none;
+        padding-left: 0;
+      }
+
+      code {
+        font-family:
+          "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        background: #f0efe9;
+        padding: 0.1rem 0.35rem;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
+
+      .retro {
+        font-style: italic;
+        color: var(--muted);
+      }
+
+      @media (max-width: 720px) {
+        header.site-header {
+          flex-direction: column;
+        }
+
+        .card-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="site-header">
+        <div>
+          <h1>claude-code-gemini-cli-skills</h1>
+          <p class="subtitle">Staged plan progress</p>
+        </div>
+        <nav aria-label="Language" class="lang-switch">
+          <span class="current">EN</span> | <a href="index.ko.html">한국어</a>
+        </nav>
+      </header>
+
+      <nav class="timeline" aria-label="Stages">
+        <ol class="timeline-track">
+          <li class="timeline-node active">
+            <span class="node-dot"></span>
+            <span class="node-label">Stage 1</span>
+          </li>
+        </ol>
+      </nav>
+
+      <section aria-labelledby="stage-1-heading">
+        <h2 id="stage-1-heading">Stage 1</h2>
+        <p class="stage-summary">
+          This fix eliminates the freeze / no-response class affecting the codex
+          and agy subagent skills.
+        </p>
+
+        <div class="card-grid">
+          <article class="card">
+            <h3>Subagent Stdin Hang Fix</h3>
+
+            <section class="field">
+              <h4>Why</h4>
+              <p>
+                Doctor Cho reported that the <code>codex-subagent</code> and
+                <code>antigravity-subagent</code> (agy) skills &quot;often
+                don&rsquo;t get the request through and seem to freeze.&quot;
+                These skills were the only supported subagents since gemini is
+                deprecated, so the stalls blocked real work.
+              </p>
+            </section>
+
+            <section class="field">
+              <h4>What</h4>
+              <ul>
+                <li>
+                  <strong>stdin blocking (primary):</strong>
+                  <code>codex exec "prompt"</code> and
+                  <code>agy -p "prompt"</code> read stdin whenever it is a
+                  non-TTY. If the harness hands over an open pipe with no EOF,
+                  the call blocks forever. <code>2&gt;/dev/null</code> hid
+                  codex&rsquo;s
+                  <code>Reading additional input from stdin...</code> line,
+                  making it look like a silent freeze. Confirmed by OpenAI codex
+                  issue #20919; the official workaround is
+                  <code>&lt; /dev/null</code>, now added to every non-resume
+                  invocation.
+                </li>
+                <li>
+                  <strong
+                    ><code>2&gt;/dev/null</code> black-holed errors:</strong
+                  >
+                  auth, rate-limit, and flag errors produced empty stdout with
+                  no diagnostics. Stderr is now captured to
+                  <code>ERRLOG=$(mktemp)</code> and surfaced on non-zero exit or
+                  empty stdout.
+                </li>
+                <li>
+                  <strong>No hard timeout:</strong> the codex skill had none, so
+                  a slow high-effort run looked frozen. A
+                  <code>timeout -k 10 &lt;N&gt;</code> wrapper now sends SIGTERM
+                  at the cap and SIGKILL 10 seconds later, so a call cannot hang
+                  indefinitely (exit 124 = timed out, 137 = force-killed).
+                </li>
+                <li>
+                  <code>--full-auto</code> deprecated in codex, replaced with
+                  <code>--sandbox workspace-write</code>.
+                </li>
+                <li>
+                  agy&rsquo;s <code>-p</code> flag without
+                  <code>--dangerously-skip-permissions</code>
+                  writes edits to a scratch sandbox
+                  (<code>~/.gemini/antigravity-cli/scratch/</code>) instead of
+                  the project &mdash; now documented so a &quot;reported success
+                  but files unchanged&quot; result is diagnosable.
+                </li>
+                <li>
+                  The claim that <code>codex exec resume</code> allows no flags
+                  was wrong per <code>resume --help</code> (<code
+                    >resume [OPTIONS] [SESSION_ID] [PROMPT]</code
+                  >); corrected.
+                </li>
+              </ul>
+            </section>
+
+            <section class="field">
+              <h4>How</h4>
+              <p>
+                Investigated with the systematic-debugging skill (root cause
+                before fix). Every claim was reproduced deterministically: an
+                open-pipe stdin yields exit 124,
+                <code>&lt; /dev/null</code> yields exit 0, a bad flag yields
+                captured stderr, and a <code>timeout -k</code> wrapper kills a
+                SIGTERM-ignoring child at exit 137. The 40-minute agy hang was
+                traced via <code>/proc/&lt;pid&gt;/fd</code> pipe-inode
+                ownership to an agentic <code>find</code> grandchild holding the
+                <code>RESULT=$(&hellip;)</code> pipe open. Findings were
+                cross-checked against the official codex docs
+                (developers.openai.com/codex) and the installed CLIs&rsquo; own
+                <code>--help</code> output.
+              </p>
+            </section>
+
+            <section class="field">
+              <h4>Code locations</h4>
+              <ul class="code-list">
+                <li>
+                  <code>codex-subagent/SKILL.md</code> &mdash; new
+                  &quot;Avoiding hangs and silent failures&quot; section; steps
+                  3&ndash;6, Quick Reference, and Error Handling updated;
+                  canonical safe-invocation block added.
+                </li>
+                <li>
+                  <code>antigravity-subagent/SKILL.md</code> &mdash; new
+                  &quot;Avoiding hangs and silent failures (read first)&quot;
+                  section plus scratch-sandbox note; output-format, Mode 1,
+                  @-syntax, resume, parallel, and error-handling examples
+                  updated; file-redirect canonical block added.
+                </li>
+              </ul>
+            </section>
+
+            <section class="field">
+              <h4>Retrospective</h4>
+              <p class="retro">
+                Two pushbacks from Doctor Cho drove the key fixes: &quot;even
+                long reasoning can&rsquo;t take 5 hours&quot; led to a hard
+                <code>timeout -k</code> bound, and &quot;making agy traverse
+                $HOME is nonsense&quot; led to finding the real 40-minute-hang
+                mechanism. Carry forward: for any subagent &quot;it froze&quot;
+                report, check three things &mdash; blocked stdin, discarded
+                stderr, and a lingering agentic grandchild holding a
+                <code>$(&hellip;)</code> pipe past the timeout &mdash; and
+                capture long agentic-CLI output to a file, not a command
+                substitution.
+              </p>
+            </section>
+          </article>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>claude-code-gemini-cli-skills — 단계별 진행 상황</title>
+    <style>
+      :root {
+        --bg: #f7f7f5;
+        --surface: #ffffff;
+        --border: #e3e2dd;
+        --text: #2b2b28;
+        --muted: #6f6f6a;
+        --accent: #0f6f66;
+        --accent-dark: #0b544e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
+          "Malgun Gothic", "Noto Sans KR", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6;
+        padding: 2.5rem 1.5rem 4rem;
+      }
+
+      .page {
+        max-width: 880px;
+        margin: 0 auto;
+      }
+
+      header.site-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 2.5rem;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+        margin: 0 0 0.25rem;
+      }
+
+      .subtitle {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      nav.lang-switch {
+        font-size: 0.9rem;
+      }
+
+      nav.lang-switch .current {
+        color: var(--muted);
+      }
+
+      nav.lang-switch a {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      nav.lang-switch a:hover,
+      nav.lang-switch a:focus {
+        text-decoration: underline;
+      }
+
+      nav.timeline {
+        margin-bottom: 3rem;
+      }
+
+      ol.timeline-track {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        position: relative;
+        display: flex;
+      }
+
+      ol.timeline-track::before {
+        content: "";
+        position: absolute;
+        top: 9px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: var(--border);
+      }
+
+      li.timeline-node {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 96px;
+      }
+
+      .node-dot {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--surface);
+        border: 2px solid var(--border);
+      }
+
+      li.timeline-node.active .node-dot {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+
+      .node-label {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      li.timeline-node.active .node-label {
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      h2 {
+        font-size: 1.25rem;
+        color: var(--accent-dark);
+        margin: 0 0 0.5rem;
+      }
+
+      .stage-summary {
+        color: var(--muted);
+        margin: 0 0 1.75rem;
+      }
+
+      .card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 1.5rem;
+      }
+
+      article.card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1.75rem;
+      }
+
+      article.card h3 {
+        margin: 0 0 1.25rem;
+        font-size: 1.1rem;
+      }
+
+      .field {
+        margin-bottom: 1.25rem;
+      }
+
+      .field:last-child {
+        margin-bottom: 0;
+      }
+
+      .field h4 {
+        margin: 0 0 0.4rem;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--accent);
+      }
+
+      .field p,
+      .field ul {
+        margin: 0;
+      }
+
+      .field ul {
+        padding-left: 1.2rem;
+      }
+
+      .field li + li {
+        margin-top: 0.5rem;
+      }
+
+      ul.code-list {
+        list-style: none;
+        padding-left: 0;
+      }
+
+      code {
+        font-family:
+          "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        background: #f0efe9;
+        padding: 0.1rem 0.35rem;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
+
+      .retro {
+        font-style: italic;
+        color: var(--muted);
+      }
+
+      @media (max-width: 720px) {
+        header.site-header {
+          flex-direction: column;
+        }
+
+        .card-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="site-header">
+        <div>
+          <h1>claude-code-gemini-cli-skills</h1>
+          <p class="subtitle">단계별 진행 상황</p>
+        </div>
+        <nav aria-label="언어" class="lang-switch">
+          <a href="index.html">EN</a> | <span class="current">한국어</span>
+        </nav>
+      </header>
+
+      <nav class="timeline" aria-label="단계">
+        <ol class="timeline-track">
+          <li class="timeline-node active">
+            <span class="node-dot"></span>
+            <span class="node-label">1단계</span>
+          </li>
+        </ol>
+      </nav>
+
+      <section aria-labelledby="stage-1-heading">
+        <h2 id="stage-1-heading">1단계</h2>
+        <p class="stage-summary">
+          이번 수정은 codex 및 agy 서브에이전트 스킬에서 발생하던 멈춤/무응답
+          문제를 제거합니다.
+        </p>
+
+        <div class="card-grid">
+          <article class="card">
+            <h3>Subagent Stdin Hang Fix</h3>
+
+            <section class="field">
+              <h4>왜</h4>
+              <p>
+                Doctor Cho는 <code>codex-subagent</code>와
+                <code>antigravity-subagent</code>
+                (agy) 스킬이 &quot;요청이 제대로 전달되지 않고 자주 멈추는 것
+                같다&quot;고 보고했습니다. gemini가 지원 중단(deprecated)된
+                상태라 이 두 스킬이 사실상 유일하게 지원되는 서브에이전트였기
+                때문에, 이 멈춤 현상은 실제 작업을 가로막고 있었습니다.
+              </p>
+            </section>
+
+            <section class="field">
+              <h4>무엇을</h4>
+              <ul>
+                <li>
+                  <strong>stdin 블로킹(주요 원인):</strong>
+                  <code>codex exec "prompt"</code>와
+                  <code>agy -p "prompt"</code>는 stdin이 비TTY(non-TTY)일 때
+                  항상 stdin을 읽으려 합니다. 하네스가 EOF 없는 열린 파이프를
+                  넘기면 호출이 영원히 블로킹됩니다.
+                  <code>2&gt;/dev/null</code>이 codex의
+                  <code>Reading additional input from stdin...</code> 메시지를
+                  가려서 마치 조용히 멈춘 것처럼 보였습니다. OpenAI codex issue
+                  #20919로 확인되었으며, 공식 우회 방법인
+                  <code>&lt; /dev/null</code>을 resume이 아닌 모든 호출에
+                  추가했습니다.
+                </li>
+                <li>
+                  <strong
+                    ><code>2&gt;/dev/null</code>이 오류를 삼켜버림:</strong
+                  >
+                  인증, 레이트리밋, 플래그 오류가 발생해도 stdout이 비어 있고
+                  진단 정보가 없었습니다. 이제 stderr를
+                  <code>ERRLOG=$(mktemp)</code>에 캡처하여 종료 코드가 0이
+                  아니거나 stdout이 비어 있을 때 노출합니다.
+                </li>
+                <li>
+                  <strong>하드 타임아웃 부재:</strong> codex 스킬에는 타임아웃이
+                  없어서, 느리고 고강도(high-effort)의 실행이 멈춘 것처럼
+                  보였습니다. <code>timeout -k 10 &lt;N&gt;</code> 래퍼를 적용해
+                  제한 시간에 SIGTERM을, 10초 뒤 SIGKILL을 보내므로 호출이
+                  무한정 멈춰 있을 수 없습니다(종료 코드 124 = 타임아웃, 137 =
+                  강제 종료).
+                </li>
+                <li>
+                  codex의 <code>--full-auto</code>는 지원 중단되어
+                  <code>--sandbox workspace-write</code>로 대체되었습니다.
+                </li>
+                <li>
+                  <code>--dangerously-skip-permissions</code> 없이 agy의
+                  <code>-p</code>를 사용하면 편집 내용이 프로젝트가 아닌
+                  스크래치 샌드박스
+                  (<code>~/.gemini/antigravity-cli/scratch/</code>)에
+                  기록됩니다. 이제 문서화되어 &quot;성공했다고 보고했지만 파일은
+                  변경되지 않은&quot; 상황을 진단할 수 있습니다.
+                </li>
+                <li>
+                  <code>codex exec resume</code>에는 플래그를 쓸 수 없다는 기존
+                  설명은 잘못된 것이었습니다. <code>resume --help</code>에
+                  따르면
+                  <code>resume [OPTIONS] [SESSION_ID] [PROMPT]</code> 형식이
+                  맞으며, 이를 수정했습니다.
+                </li>
+              </ul>
+            </section>
+
+            <section class="field">
+              <h4>어떻게</h4>
+              <p>
+                systematic-debugging 스킬을 이용해 근본 원인을 먼저 파악한 뒤
+                수정하는 방식으로 조사했습니다. 모든 주장은 결정론적으로
+                재현되었습니다. 열린 파이프 상태의 stdin은 종료 코드 124를 내고,
+                <code>&lt; /dev/null</code>을 사용하면 종료 코드 0이 되며,
+                잘못된 플래그는 stderr에 캡처되고,
+                <code>timeout -k</code> 래퍼는 SIGTERM을 무시하는 자식
+                프로세스를 종료 코드 137로 강제 종료합니다. agy에서 발생한
+                40분짜리 멈춤 현상은 <code>/proc/&lt;pid&gt;/fd</code>의 파이프
+                아이노드(pipe-inode) 소유권을 추적하여, 에이전틱(agentic)
+                <code>find</code> 손자 프로세스가
+                <code>RESULT=$(&hellip;)</code> 파이프를 열어둔 채 놓지 않고
+                있었음을 확인했습니다. 이 결과들은 공식 codex 문서
+                (developers.openai.com/codex)와 설치된 CLI 자체의
+                <code>--help</code> 출력과 교차 검증했습니다.
+              </p>
+            </section>
+
+            <section class="field">
+              <h4>코드 위치</h4>
+              <ul class="code-list">
+                <li>
+                  <code>codex-subagent/SKILL.md</code> &mdash; &quot;Avoiding
+                  hangs and silent failures&quot; 섹션 신설; 3&ndash;6단계,
+                  Quick Reference, Error Handling 갱신; 안전한 호출을 위한 표준
+                  블록 추가.
+                </li>
+                <li>
+                  <code>antigravity-subagent/SKILL.md</code> &mdash;
+                  &quot;Avoiding hangs and silent failures (read first)&quot;
+                  섹션과 스크래치 샌드박스 관련 설명 추가; output-format, Mode
+                  1, @-syntax, resume, 병렬 실행, 오류 처리 예제 갱신; 파일
+                  리다이렉트 표준 블록 추가.
+                </li>
+              </ul>
+            </section>
+
+            <section class="field">
+              <h4>회고</h4>
+              <p class="retro">
+                Doctor Cho의 두 차례 피드백이 핵심 수정을 이끌었습니다.
+                &quot;아무리 긴 추론이라도 5시간이 걸릴 수는 없다&quot;는 지적은
+                <code>timeout -k</code>를 이용한 하드 타임아웃 도입으로
+                이어졌고, &quot;agy가 $HOME 전체를 탐색하는 것은 말이 안
+                된다&quot;는 지적은 실제 40분 멈춤 메커니즘을 찾아내는 계기가
+                되었습니다. 앞으로도 서브에이전트가 &quot;멈췄다&quot;는 보고를
+                받으면 세 가지를 확인해야 합니다 &mdash; stdin 블로킹 여부,
+                stderr 폐기 여부, 그리고 타임아웃 이후에도
+                <code>$(&hellip;)</code> 파이프를 붙잡고 있는 에이전틱 손자
+                프로세스 여부. 그리고 긴 에이전틱 CLI 출력은 커맨드 치환이
+                아니라 파일로 캡처해야 합니다.
+              </p>
+            </section>
+          </article>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>
