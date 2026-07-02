@@ -253,14 +253,14 @@ Constraints: {any specific requirements}
 
 ### Multiple `agy` agents in parallel
 
-Send multiple Bash tool calls in a **single** response. Each runs independently and returns its own stdout — no tmux, no polling.
+Send multiple Bash tool calls in a **single** response. Each runs independently and returns its own stdout — no tmux, no polling. Because each call is a **separate shell**, it cannot share an `$ERRLOG` defined elsewhere; define the temp log *inside each command* (otherwise `2>"$ERRLOG"` fails on an unset variable before `agy` even starts).
 
 ```bash
-# Bash call 1 (runs simultaneously with call 2):
-agy --model "Gemini 3.1 Pro (High)" -p "TASK 1" < /dev/null 2>"$ERRLOG"
+# Bash call 1 (runs simultaneously with call 2) — self-contained:
+ERRLOG=$(mktemp); agy --model "Gemini 3.1 Pro (High)" -p "TASK 1" < /dev/null 2>"$ERRLOG"; [ $? -ne 0 ] && cat "$ERRLOG"; rm -f "$ERRLOG"
 
-# Bash call 2 (runs simultaneously with call 1):
-agy --model "Gemini 3.1 Pro (High)" -p "TASK 2" < /dev/null 2>"$ERRLOG2"
+# Bash call 2 (runs simultaneously with call 1) — self-contained:
+ERRLOG=$(mktemp); agy --model "Gemini 3.1 Pro (High)" -p "TASK 2" < /dev/null 2>"$ERRLOG"; [ $? -ne 0 ] && cat "$ERRLOG"; rm -f "$ERRLOG"
 ```
 
 ### Claude + `agy` in parallel
