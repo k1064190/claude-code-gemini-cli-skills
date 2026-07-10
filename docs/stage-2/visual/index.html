@@ -249,98 +249,87 @@
 
       <nav class="timeline" aria-label="Stages">
         <ol class="timeline-track">
-          <li class="timeline-node active">
-            <span class="node-dot"></span>
+          <li class="timeline-node">
+            <span class="node-dot muted"></span>
             <span class="node-label">Stage 1</span>
           </li>
-          <li class="timeline-node">
-            <span class="node-dot future"></span>
+          <li class="timeline-node active">
+            <span class="node-dot"></span>
             <span class="node-label">Stage 2</span>
           </li>
         </ol>
       </nav>
 
-      <section aria-labelledby="stage-1-heading">
-        <h2 id="stage-1-heading">Stage 1</h2>
+      <section aria-labelledby="stage-2-heading">
+        <h2 id="stage-2-heading">Stage 2</h2>
         <p class="stage-summary">
-          Eliminates the codex/agy subagent freeze class.
+          Bumps the codex default model to gpt-5.6-sol.
         </p>
 
         <div class="card-grid">
           <article class="card">
-            <h3>Subagent Stdin Hang Fix</h3>
+            <h3>Codex Default Gpt 5.6 Sol</h3>
 
             <section class="field">
               <h4>Why</h4>
               <p>
-                Doctor Cho reported that the <code>codex-subagent</code> and
-                <code>antigravity-subagent</code> (agy) skills &quot;often
-                don&rsquo;t get the request through and seem to freeze.&quot;
-                These skills were the only supported subagents since gemini is
-                deprecated, so the stalls blocked real work.
+                OpenAI released the GPT-5.6 family (tiers: Sol flagship / Terra
+                / Luna) on 2026-07-09. The skill pins its default model
+                explicitly (by design &mdash; nothing auto-tracks new releases),
+                so it kept using <code>gpt-5.5</code> until bumped. Doctor Cho
+                asked whether new models are picked up automatically; the answer
+                was no, on two layers (skill default +
+                <code>~/.codex/config.toml</code>), plus the installed CLI
+                (0.139.0) predated the model.
               </p>
             </section>
 
             <section class="field">
               <h4>What</h4>
-              <ol>
+              <ul>
                 <li>
-                  <strong>stdin blocking (primary):</strong>
-                  <code>codex exec "prompt"</code> and
-                  <code>agy -p "prompt"</code> read stdin whenever it is a
-                  non-TTY; an open pipe with no EOF blocks forever, and
-                  <code>2&gt;/dev/null</code> hid the notice &mdash; a silent
-                  freeze. Confirmed by OpenAI codex issue #20919; official
-                  workaround <code>&lt; /dev/null</code> added to every
-                  non-resume invocation.
+                  Upgraded codex CLI 0.139.0 &rarr; 0.144.1 (<code
+                    >codex update</code
+                  >); 0.139.0 rejected the model with 400 &quot;requires a newer
+                  version of Codex&quot;.
                 </li>
                 <li>
-                  <code>2&gt;/dev/null</code> black-holed errors.
-                  Auth/rate-limit/flag errors produced empty stdout, no
-                  diagnostics. Now: capture stderr to
-                  <code>ERRLOG=$(mktemp)</code> and surface it on non-zero exit
-                  / empty stdout.
+                  <code>~/.codex/config.toml</code>:
+                  <code>model = "gpt-5.5"</code> &rarr;
+                  <code>"gpt-5.6-sol"</code>.
                 </li>
                 <li>
-                  No hard timeout. Added <code>timeout -k 10 &lt;N&gt;</code>:
-                  SIGTERM at the cap, SIGKILL 10s later; exit 124 = timed out,
-                  137 = force-killed.
+                  <code>codex-subagent/SKILL.md</code>: default &rarr;
+                  <code>gpt-5.6-sol</code> (effort <code>high</code> unchanged);
+                  model list refreshed with the three 5.6 tiers; canonical
+                  example updated; added two caveats &mdash; never use the bare
+                  <code>gpt-5.6</code> alias (400 &quot;not supported when using
+                  Codex with a ChatGPT account&quot;), and &quot;requires a
+                  newer version&quot; &rarr; run <code>codex update</code>.
                 </li>
                 <li>
-                  <code>--full-auto</code> deprecated in codex &mdash; replaced
-                  with <code>--sandbox workspace-write</code>.
+                  Strategy decision (user): the preferred &quot;alias
+                  semi-auto&quot; option was empirically blocked on
+                  ChatGPT-account auth, so fell back to the explicit
+                  <code>gpt-5.6-sol</code> pin; revisit if OpenAI enables the
+                  alias for ChatGPT accounts.
                 </li>
-                <li>
-                  agy <code>-p</code> without
-                  <code>--dangerously-skip-permissions</code> writes edits to a
-                  scratch sandbox
-                  (<code>~/.gemini/antigravity-cli/scratch/</code>), not the
-                  project &mdash; documented.
-                </li>
-                <li>
-                  <code>codex exec resume</code> flag claim (&quot;no flags
-                  allowed&quot;) was wrong per <code>resume --help</code>
-                  &mdash; corrected.
-                </li>
-              </ol>
+              </ul>
             </section>
 
             <section class="field">
               <h4>How</h4>
               <p>
-                Investigated with the systematic-debugging skill (root cause
-                before fix). Every claim reproduced deterministically (open-pipe
-                stdin &rarr; exit 124; <code>&lt; /dev/null</code>
-                &rarr; exit 0; bad flag &rarr; captured stderr;
-                <code>timeout -k</code> kills a SIGTERM-ignoring child at exit
-                137). The agy 40-minute hang was traced via
-                <code>/proc/&lt;pid&gt;/fd</code> pipe-inode ownership to an
-                agentic <code>find</code> grandchild holding the
-                <code>RESULT=$(&hellip;)</code> pipe open &mdash; fixed by
-                capturing agy stdout to a file, never
-                <code>$(agy &hellip;)</code>, and by never making agy hunt for
-                files. Cross-checked against official codex docs and the
-                CLIs&rsquo; own <code>--help</code>.
+                Every claim verified against the live CLI before editing: alias
+                rejected (400), explicit
+                <code>gpt-5.6-sol</code>/<code>-terra</code>/<code>-luna</code>
+                all return OK, efforts <code>high</code> and
+                <code>xhigh</code> valid on sol, and a no-<code>-m</code> run
+                resolves to sol via the updated config. All tests used the
+                stage-1 safe pattern (<code>&lt; /dev/null</code>,
+                <code>$ERRLOG</code>, <code>timeout -k</code>, file-redirect)
+                &mdash; the alias failure surfaced instantly as a clean 400
+                instead of a silent freeze, validating the stage-1 work.
               </p>
             </section>
 
@@ -348,17 +337,15 @@
               <h4>Code locations</h4>
               <ul class="code-list">
                 <li>
-                  <code>codex-subagent/SKILL.md</code> &mdash; new
-                  &quot;Avoiding hangs and silent failures&quot; section; steps
-                  3&ndash;6, Quick Reference, Error Handling; canonical
-                  safe-invocation block.
+                  <code>codex-subagent/SKILL.md</code> &mdash; step 1 (default +
+                  model list + alias/upgrade caveats), &quot;Avoiding
+                  hangs&quot; point 2, canonical safe-invocation block (<code
+                    >-m gpt-5.6-sol</code
+                  >).
                 </li>
                 <li>
-                  <code>antigravity-subagent/SKILL.md</code> &mdash; new
-                  &quot;Avoiding hangs and silent failures (read first)&quot;
-                  section + scratch-sandbox note; Output-format / Mode 1 /
-                  <code>@</code>-syntax / resume / parallel / error-handling
-                  examples; file-redirect canonical block.
+                  <code>~/.codex/config.toml</code> (outside repo) &mdash;
+                  <code>model = "gpt-5.6-sol"</code>.
                 </li>
               </ul>
             </section>
@@ -366,16 +353,12 @@
             <section class="field">
               <h4>Retrospective</h4>
               <p class="retro">
-                Two user push-backs drove the most important fixes: &quot;even
-                long reasoning can&rsquo;t take 5 hours&quot; &rarr; hard
-                <code>timeout -k</code> bound; &quot;making agy traverse $HOME
-                is nonsense&quot; &rarr; found the 40-minute-hang mechanism
-                (agentic <code>find</code> grandchild holding a
-                command-substitution pipe). Carry forward: for any subagent
-                &quot;it froze&quot; report check stdin blocking, discarded
-                stderr, and a lingering grandchild holding a
-                <code>$(&hellip;)</code> pipe; capture long agentic-CLI output
-                to a file.
+                &quot;Is it automatic?&quot; was the right question &mdash; the
+                pin is deliberate, but it lives in three places (skill,
+                config.toml, CLI version), and all three had to move together.
+                Carry forward: when bumping a model default, test the exact id
+                on the installed CLI first; vendor aliases can be
+                auth-tier-gated even when the underlying model works.
               </p>
             </section>
           </article>

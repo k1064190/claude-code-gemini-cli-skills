@@ -249,102 +249,91 @@
 
       <nav class="timeline" aria-label="단계">
         <ol class="timeline-track">
-          <li class="timeline-node active">
-            <span class="node-dot"></span>
+          <li class="timeline-node">
+            <span class="node-dot muted"></span>
             <span class="node-label">1단계</span>
           </li>
-          <li class="timeline-node">
-            <span class="node-dot future"></span>
+          <li class="timeline-node active">
+            <span class="node-dot"></span>
             <span class="node-label">2단계</span>
           </li>
         </ol>
       </nav>
 
-      <section aria-labelledby="stage-1-heading">
-        <h2 id="stage-1-heading">1단계</h2>
-        <p class="stage-summary">
-          codex/agy 서브에이전트의 멈춤(freeze) 문제를 근본적으로 제거합니다.
-        </p>
+      <section aria-labelledby="stage-2-heading">
+        <h2 id="stage-2-heading">2단계</h2>
+        <p class="stage-summary">codex 기본 모델을 gpt-5.6-sol로 올립니다.</p>
 
         <div class="card-grid">
           <article class="card">
-            <h3>Subagent Stdin Hang Fix</h3>
+            <h3>Codex Default Gpt 5.6 Sol</h3>
 
             <section class="field">
               <h4>왜</h4>
               <p>
-                Doctor Cho는 <code>codex-subagent</code>와
-                <code>antigravity-subagent</code>
-                (agy) 스킬이 &quot;요청이 제대로 전달되지 않고 자주 멈추는 것
-                같다&quot;고 보고했습니다. gemini가 지원 중단(deprecated)된
-                상태라 이 두 스킬이 사실상 유일하게 지원되는 서브에이전트였기
-                때문에, 이 멈춤 현상은 실제 작업을 가로막고 있었습니다.
+                OpenAI가 2026-07-09에 GPT-5.6 계열(등급: Sol 플래그십 / Terra /
+                Luna)을 출시했습니다. 이 스킬은 기본 모델을 명시적으로 고정해
+                두는 방식이라(설계상 &mdash; 새 릴리스를 자동으로 추적하지 않음)
+                업데이트하기 전까지는 계속
+                <code>gpt-5.5</code>를 사용하고 있었습니다. Doctor Cho는 새
+                모델이 자동으로 반영되는지 물었고, 답은
+                &quot;아니오&quot;였습니다. 두 계층(스킬 기본값 +
+                <code>~/.codex/config.toml</code>) 모두에서 그랬고, 설치된
+                CLI(0.139.0) 버전도 해당 모델보다 이전 버전이었습니다.
               </p>
             </section>
 
             <section class="field">
               <h4>무엇을</h4>
-              <ol>
+              <ul>
                 <li>
-                  <strong>stdin 블로킹(주요 원인).</strong>
-                  <code>codex exec "prompt"</code>와
-                  <code>agy -p "prompt"</code>는 stdin이 비TTY(non-TTY)일 때
-                  항상 stdin을 읽습니다. EOF 없는 열린 파이프는 영원히
-                  블로킹되며, <code>2&gt;/dev/null</code>이 그 알림 메시지를
-                  가려 조용한 멈춤처럼 보였습니다. OpenAI codex issue #20919로
-                  확인되었으며, 공식 우회 방법인 <code>&lt; /dev/null</code>을
-                  resume이 아닌 모든 호출에 추가했습니다.
+                  codex CLI를 0.139.0 &rarr; 0.144.1로 업그레이드했습니다 (<code
+                    >codex update</code
+                  >). 0.139.0은 해당 모델을 400 &quot;requires a newer version
+                  of Codex&quot; 오류로 거부했습니다.
                 </li>
                 <li>
-                  <code>2&gt;/dev/null</code>이 오류를 삼켜버렸습니다. 인증,
-                  레이트리밋, 플래그 오류에도 stdout이 비어 있고 진단 정보가
-                  없었습니다. 이제 stderr를 <code>ERRLOG=$(mktemp)</code>에
-                  캡처하여 종료 코드가 0이 아니거나 stdout이 비어 있을 때
-                  노출합니다.
+                  <code>~/.codex/config.toml</code>:
+                  <code>model = "gpt-5.5"</code> &rarr;
+                  <code>"gpt-5.6-sol"</code>로 변경했습니다.
                 </li>
                 <li>
-                  하드 타임아웃이 없었습니다.
-                  <code>timeout -k 10 &lt;N&gt;</code>을 추가했습니다. 제한
-                  시간에 SIGTERM을, 10초 뒤 SIGKILL을 보냅니다. 종료 코드 124 =
-                  타임아웃, 137 = 강제 종료입니다.
+                  <code>codex-subagent/SKILL.md</code>: 기본값을
+                  <code>gpt-5.6-sol</code>로 변경했습니다(effort
+                  <code>high</code>는 그대로 유지). 모델 목록을 5.6의 세
+                  등급으로 갱신했고, 표준 예제를 업데이트했으며, 두 가지
+                  주의사항을 추가했습니다 &mdash; <code>gpt-5.6</code> 별칭을
+                  단독으로 쓰지 말 것(ChatGPT 계정 인증에서 400 &quot;not
+                  supported when using Codex with a ChatGPT account&quot; 오류
+                  발생), 그리고 &quot;requires a newer version&quot; 오류가 나면
+                  <code>codex update</code>를 실행할 것.
                 </li>
                 <li>
-                  codex의 <code>--full-auto</code>는 지원 중단되어
-                  <code>--sandbox workspace-write</code>로 대체되었습니다.
+                  전략 결정(사용자): 선호했던 &quot;별칭 반자동&quot; 방식은
+                  ChatGPT 계정 인증에서 실증적으로 막혀 있어서, 명시적인
+                  <code>gpt-5.6-sol</code> 고정 방식으로 되돌아갔습니다.
+                  OpenAI가 ChatGPT 계정에 별칭을 허용하게 되면 재검토할
+                  예정입니다.
                 </li>
-                <li>
-                  <code>--dangerously-skip-permissions</code> 없이 agy의
-                  <code>-p</code>를 사용하면 편집 내용이 프로젝트가 아닌
-                  스크래치 샌드박스
-                  (<code>~/.gemini/antigravity-cli/scratch/</code>)에 기록됩니다
-                  &mdash; 이제 문서화되었습니다.
-                </li>
-                <li>
-                  <code>codex exec resume</code>에는 플래그를 쓸 수 없다는 기존
-                  주장은 <code>resume --help</code> 기준으로 잘못된 것이었으며,
-                  이를 수정했습니다.
-                </li>
-              </ol>
+              </ul>
             </section>
 
             <section class="field">
               <h4>어떻게</h4>
               <p>
-                systematic-debugging 스킬을 이용해 근본 원인을 먼저 파악한 뒤
-                수정하는 방식으로 조사했습니다. 모든 주장은 결정론적으로
-                재현되었습니다(열린 파이프 상태의 stdin &rarr; 종료 코드 124;
-                <code>&lt; /dev/null</code> &rarr; 종료 코드 0; 잘못된 플래그
-                &rarr; stderr에 캡처됨; <code>timeout -k</code>는 SIGTERM을
-                무시하는 자식 프로세스를 종료 코드 137로 강제 종료). agy에서
-                발생한 40분짜리 멈춤 현상은 <code>/proc/&lt;pid&gt;/fd</code>의
-                파이프 아이노드(pipe-inode) 소유권을 추적하여, 에이전틱(agentic)
-                <code>find</code> 손자 프로세스가
-                <code>RESULT=$(&hellip;)</code> 파이프를 열어둔 채 붙잡고
-                있었음을 확인했습니다. agy stdout을 파일로 캡처하고 절대
-                <code>$(agy &hellip;)</code>로 감싸지 않으며, agy가 파일을 찾아
-                헤매게 하지 않는 방식으로 해결했습니다. 이 결과들은 공식 codex
-                문서와 각 CLI 자체의 <code>--help</code> 출력과 교차
-                검증했습니다.
+                수정하기 전에 모든 주장을 실제 CLI로 검증했습니다. 별칭은
+                거부되었고(400),
+                <code>gpt-5.6-sol</code
+                >/<code>-terra</code>/<code>-luna</code>를 명시적으로 지정하면
+                모두 정상 동작했으며, effort <code>high</code>와
+                <code>xhigh</code> 모두 sol에서 유효했습니다.
+                <code>-m</code> 없이 실행하면 갱신된 설정을 통해 sol로
+                해석되었습니다. 모든 테스트는 stage-1의 안전한 패턴(<code
+                  >&lt; /dev/null</code
+                >, <code>$ERRLOG</code>, <code>timeout -k</code>, 파일
+                리다이렉트)을 사용했습니다 &mdash; 별칭 실패는 조용한 멈춤이
+                아니라 즉시 명확한 400 오류로 나타나, stage-1 작업이 유효함을
+                검증해 주었습니다.
               </p>
             </section>
 
@@ -352,17 +341,15 @@
               <h4>코드 위치</h4>
               <ul class="code-list">
                 <li>
-                  <code>codex-subagent/SKILL.md</code> &mdash; &quot;Avoiding
-                  hangs and silent failures&quot; 섹션 신설; 3&ndash;6단계,
-                  Quick Reference, Error Handling 갱신; 안전한 호출을 위한 표준
-                  블록 추가.
+                  <code>codex-subagent/SKILL.md</code> &mdash; 1단계(기본값 +
+                  모델 목록 + 별칭/업그레이드 주의사항), &quot;Avoiding
+                  hangs&quot;의 2번 항목, 표준 안전 호출 블록 (<code
+                    >-m gpt-5.6-sol</code
+                  >).
                 </li>
                 <li>
-                  <code>antigravity-subagent/SKILL.md</code> &mdash;
-                  &quot;Avoiding hangs and silent failures (read first)&quot;
-                  섹션과 스크래치 샌드박스 관련 설명 추가; Output-format / Mode
-                  1 / <code>@</code>-syntax / resume / 병렬 실행 / 오류 처리
-                  예제 갱신; 파일 리다이렉트 표준 블록 추가.
+                  <code>~/.codex/config.toml</code>(저장소 외부) &mdash;
+                  <code>model = "gpt-5.6-sol"</code>.
                 </li>
               </ul>
             </section>
@@ -370,17 +357,12 @@
             <section class="field">
               <h4>회고</h4>
               <p class="retro">
-                Doctor Cho의 두 차례 피드백이 핵심 수정을 이끌었습니다.
-                &quot;아무리 긴 추론이라도 5시간이 걸릴 수는 없다&quot;는 지적은
-                <code>timeout -k</code>를 이용한 하드 타임아웃 도입으로
-                이어졌고, &quot;agy가 $HOME 전체를 탐색하는 것은 말이 안
-                된다&quot;는 지적은 실제 40분 멈춤 메커니즘(에이전틱
-                <code>find</code> 손자 프로세스가 커맨드 치환 파이프를 붙잡고
-                있던 것)을 찾아내는 계기가 되었습니다. 앞으로도 서브에이전트가
-                &quot;멈췄다&quot;는 보고를 받으면 stdin 블로킹, stderr 폐기,
-                그리고 타임아웃 이후에도 <code>$(&hellip;)</code> 파이프를
-                붙잡고 있는 잔존 손자 프로세스를 확인해야 합니다. 그리고 긴
-                에이전틱 CLI 출력은 커맨드 치환이 아니라 파일로 캡처해야 합니다.
+                &quot;자동으로 되나요?&quot;라는 질문이 정확한 질문이었습니다
+                &mdash; 고정 방식은 의도된 설계이지만, 그 값은 세 곳(스킬,
+                config.toml, CLI 버전)에 흩어져 있고 세 곳 모두 함께 갱신되어야
+                했습니다. 앞으로도 모델 기본값을 올릴 때는 설치된 CLI에서 정확한
+                id를 먼저 테스트해야 합니다. 벤더의 별칭은 기반 모델 자체가
+                동작하더라도 인증 등급에 따라 막혀 있을 수 있습니다.
               </p>
             </section>
           </article>
