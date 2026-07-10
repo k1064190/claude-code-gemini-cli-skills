@@ -6,7 +6,7 @@ description: Use when the user asks to run Codex CLI (codex exec, codex resume) 
 # Codex Skill Guide
 
 ## Running a Task
-1. **Default: model `gpt-5.5` with reasoning effort `high`.** Use these for every task unless the user has explicitly specified a different model or reasoning effort (e.g., "use gpt-5.4-mini", "run with effort xhigh"). Only call `AskUserQuestion` to confirm/collect a non-default choice when the user signals they want one. Available models: `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex-spark`, `gpt-5.3-codex`. Available reasoning efforts: `xhigh`, `high`, `medium`, `low`.
+1. **Default: model `gpt-5.6-sol` with reasoning effort `high`.** Use these for every task unless the user has explicitly specified a different model or reasoning effort (e.g., "use gpt-5.6-luna", "run with effort xhigh"). Only call `AskUserQuestion` to confirm/collect a non-default choice when the user signals they want one. Available models: `gpt-5.6-sol` (flagship), `gpt-5.6-terra` (cheaper everyday), `gpt-5.6-luna` (fastest), `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex-spark`, `gpt-5.3-codex`. Available reasoning efforts: `xhigh`, `high`, `medium`, `low`. ⚠️ Always pass the **explicit tier id** (`gpt-5.6-sol`), never the bare `gpt-5.6` alias — the alias is rejected with a 400 (`"not supported when using Codex with a ChatGPT account"`) on ChatGPT-account auth. If a model errors with `"requires a newer version of Codex"`, run `codex update` first.
 2. Select the sandbox mode required for the task; default to `--sandbox read-only` unless edits or network access are necessary.
 3. Assemble the command with the appropriate options. `--skip-git-repo-check` and the `< /dev/null` stdin redirect are always required (see [Avoiding hangs](#avoiding-hangs-and-silent-failures)):
    - `-m, --model <MODEL>`
@@ -27,7 +27,7 @@ description: Use when the user asks to run Codex CLI (codex exec, codex resume) 
 These three habits prevent the two ways a `codex exec` call "silently freezes" — blocking on stdin, and a hidden error behind `2>/dev/null`.
 
 1. **Always redirect stdin on the initial call: `< /dev/null`.** `codex exec` reads stdin whenever stdin is not a TTY (to append it as a `<stdin>` context block). If the harness hands the process an open pipe that never delivers bytes or EOF, `read()` blocks **forever** — the run looks frozen and no output ever appears. This is [openai/codex issue #20919](https://github.com/openai/codex/issues/20919); the official workaround is exactly `codex exec "<prompt>" < /dev/null`. The only time you omit `< /dev/null` is when you are *deliberately* piping context in (e.g. `git diff | codex exec "review this diff" 2>"$ERRLOG"`) — a real pipe supplies EOF and is safe. Never leave stdin unmanaged.
-2. **Wrap every call in `timeout -k`.** A high-effort `gpt-5.5` run can take minutes with no visible output. Use `timeout -k 10 600 codex exec … < /dev/null 2>"$ERRLOG"`: the `600` sends SIGTERM after 10 min, and `-k 10` follows with SIGKILL 10 s later so a process that ignores SIGTERM still dies — the call **cannot** hang indefinitely. Treat **exit 124 as "timed out"** (and **137** as "force-killed after the grace period") — report it plainly instead of retrying blindly. Raise the cap for genuinely large tasks; don't remove it. Verified: a `timeout` even survives command substitution — `RESULT=$(timeout -k 10 600 codex exec …)` returns at the cap, not later.
+2. **Wrap every call in `timeout -k`.** A high-effort `gpt-5.6-sol` run can take minutes with no visible output. Use `timeout -k 10 600 codex exec … < /dev/null 2>"$ERRLOG"`: the `600` sends SIGTERM after 10 min, and `-k 10` follows with SIGKILL 10 s later so a process that ignores SIGTERM still dies — the call **cannot** hang indefinitely. Treat **exit 124 as "timed out"** (and **137** as "force-killed after the grace period") — report it plainly instead of retrying blindly. Raise the cap for genuinely large tasks; don't remove it. Verified: a `timeout` even survives command substitution — `RESULT=$(timeout -k 10 600 codex exec …)` returns at the cap, not later.
 3. **Keep stderr, surface it on failure** (see step 5 above). **Standing convention:** every `$ERRLOG` below assumes you ran `ERRLOG=$(mktemp)` once first — a `2>"$ERRLOG"` with `ERRLOG` unset fails with an *empty-filename* error and the command never runs, so define it (or substitute `2>/dev/null`) when copying a snippet in isolation.
 
 Canonical safe invocation:
@@ -35,7 +35,7 @@ Canonical safe invocation:
 ```bash
 ERRLOG=$(mktemp)
 timeout -k 10 600 codex exec --skip-git-repo-check --sandbox read-only \
-  -m gpt-5.5 --config model_reasoning_effort="high" \
+  -m gpt-5.6-sol --config model_reasoning_effort="high" \
   "your prompt here" < /dev/null 2>"$ERRLOG"
 rc=$?   # not `status`: that name is read-only in fish/zsh
 if [ "$rc" -ne 0 ]; then echo "codex failed (exit $rc):"; cat "$ERRLOG"; fi
