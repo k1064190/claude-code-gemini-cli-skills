@@ -32,9 +32,18 @@ as a clean 400 instead of a silent freeze, validating the stage-1 work.
 - `~/.codex/config.toml` (outside repo) — `model = "gpt-5.6-sol"`.
 
 ## Review loop
-All three reviewers ran on the diff and returned clean: `code-reviewer-pro` (0 issues — checked
-no stale `gpt-5.5` default remains), `codex` (no blocking issues; the review itself executed on
-the new `gpt-5.6-sol` default), `agy` (no blocking issues). Nothing to fix or dismiss.
+All three local reviewers ran on the diff and returned clean: `code-reviewer-pro` (0 issues —
+checked no stale `gpt-5.5` default remains *in the skill*), `codex` (no blocking issues; the
+review itself executed on the new `gpt-5.6-sol` default), `agy` (no blocking issues).
+
+The Codex GitHub bot replied post-merge (PR #4) with two P2s, resolved in a follow-up PR:
+- **Confirmed:** `README.md` still documented `gpt-5.5` as the default (4 places). Fixed —
+  and while editing that snippet, brought the README quick-start example in line with the
+  stage-1 safe pattern (`< /dev/null`, `$ERRLOG`) it still contradicted.
+- **Dismissed with evidence:** claim that efforts `ultra`/`max` exist. The official config
+  reference lists `minimal | low | medium | high | xhigh` only (live CLI check was blocked by
+  an account usage limit at the time). Real gap found during verification: our list omitted
+  `minimal` — added.
 
 ## Retrospective
 "Is it automatic?" was the right question — the pin is deliberate, but it lives in *three*

@@ -39,7 +39,7 @@ These skills pin a single default model per agent and switch only when the user 
 
 - **Antigravity**: always invoke with `--model "Gemini 3.1 Pro (High)"`. Switch to a Flash, Claude, or GPT-OSS model only when the user explicitly requests it. Run `agy models` to see the exact strings available.
 - **Gemini**: always invoke with `-m pro` (`gemini-3.1-pro-preview`). Switch to `-m flash` only when the user explicitly requests speed/flash.
-- **Codex**: always invoke with model `gpt-5.5` and reasoning effort `high`. Switch only when the user explicitly names a different model or effort (e.g., "use gpt-5.4-mini", "set effort to xhigh").
+- **Codex**: always invoke with model `gpt-5.6-sol` and reasoning effort `high`. Switch only when the user explicitly names a different model or effort (e.g., "use gpt-5.6-luna", "set effort to xhigh"). Always pass the explicit tier id — the bare `gpt-5.6` alias is rejected on ChatGPT-account auth.
 
 ## Requirements
 
@@ -140,15 +140,18 @@ gemini -m flash -p "What is the capital of France?" --output-format json 2>/dev/
 ### Codex
 
 ```bash
-# Default invocation — gpt-5.5 with high reasoning effort, read-only sandbox
+# Default invocation — gpt-5.6-sol with high reasoning effort, read-only sandbox.
+# `< /dev/null` is required: without it codex can block forever on a non-TTY stdin.
+# Capture stderr to a file instead of discarding it (see codex-subagent/SKILL.md).
+ERRLOG=$(mktemp)
 codex exec --skip-git-repo-check \
-  -m gpt-5.5 \
+  -m gpt-5.6-sol \
   --config model_reasoning_effort="high" \
   --sandbox read-only \
-  "Review this diff for correctness and security issues." 2>/dev/null
+  "Review this diff for correctness and security issues." < /dev/null 2>"$ERRLOG"
 
-# Resume the most recent session (inherits model / effort / sandbox)
-echo "follow-up question" | codex exec --skip-git-repo-check resume --last 2>/dev/null
+# Resume the most recent session (inherits model / effort / sandbox; echo | supplies EOF)
+echo "follow-up question" | codex exec --skip-git-repo-check resume --last 2>"$ERRLOG"
 ```
 
 ## Models
@@ -176,10 +179,11 @@ Run `agy models` for the exact, currently-installed strings (pass them verbatim 
 
 | Model | When to use |
 |-------|-------------|
-| `gpt-5.5` | **Default for every task.** |
-| `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex-spark`, `gpt-5.3-codex` | Only when the user explicitly names one. |
+| `gpt-5.6-sol` | **Default for every task.** (Flagship 5.6 tier; pass the explicit id, never the bare `gpt-5.6` alias.) |
+| `gpt-5.6-terra`, `gpt-5.6-luna` | Cheaper / fastest 5.6 tiers — only when the user explicitly names one. |
+| `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex-spark`, `gpt-5.3-codex` | Only when the user explicitly names one. |
 
-Reasoning effort defaults to `high`; valid values are `xhigh`, `high`, `medium`, `low`. Override only on explicit user request.
+Reasoning effort defaults to `high`; valid values are `xhigh`, `high`, `medium`, `low`, `minimal`. Override only on explicit user request.
 
 ## Gemini key patterns
 
