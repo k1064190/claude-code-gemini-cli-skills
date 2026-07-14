@@ -38,7 +38,7 @@ Delegate tasks from Claude to OpenAI Codex CLI running as an independent agent. 
 Delegate tasks to a fresh Claude Code CLI run (`claude -p`). Useful for:
 
 - **Clean context** — A cold instance reads the code without the current conversation's assumptions
-- **Scoped permissions** — `--allowedTools` auto-approves exactly the tools a run needs; anything else is denied without a prompt (use `--tools` to restrict the built-in set itself)
+- **Scoped permissions** — `--tools` bounds which tools exist and `--permission-mode dontAsk` denies the rest, so a subagent can be held to read-only regardless of the machine's settings
 - **Parallel execution** — Run several `claude -p` instances concurrently via parallel Bash calls
 - **Orchestration from other CLIs** — Codex or Antigravity can call Claude for a subtask
 
@@ -51,7 +51,7 @@ These skills pin a single default model per agent and switch only when the user 
 - **Antigravity**: always invoke with `--model "Gemini 3.1 Pro (High)"`. Switch to a Flash, Claude, or GPT-OSS model only when the user explicitly requests it. Run `agy models` to see the exact strings available.
 - **Gemini**: always invoke with `-m pro` (`gemini-3.1-pro-preview`). Switch to `-m flash` only when the user explicitly requests speed/flash.
 - **Codex**: always invoke with model `gpt-5.6-sol` and reasoning effort `high`. Switch only when the user explicitly names a different model or effort (e.g., "use gpt-5.6-luna", "set effort to xhigh"). Always pass the explicit tier id — the bare `gpt-5.6` alias is rejected on ChatGPT-account auth.
-- **Claude**: always invoke with `--model opus` and **without `--bare`**. Bare mode never reads OAuth or the keychain, so on a subscription account it fails with `"Not logged in · Please run /login"` — only use it if `ANTHROPIC_API_KEY` is set. Switch to `sonnet`/`haiku` only when the user explicitly asks. Worth surfacing before a large fan-out: a trivial `opus` call still costs ~$0.40, since a non-bare run loads CLAUDE.md, plugins, and skills.
+- **Claude**: always invoke with `--model opus` and **without `--bare`**. Bare mode never reads OAuth or the keychain, so on a subscription account it fails with `"Not logged in · Please run /login"`; it is safe only with a non-OAuth credential source (`ANTHROPIC_API_KEY`, an `apiKeyHelper` via `--settings`, or Bedrock / Google Cloud / Foundry credentials). Bound the tools with **`--tools` plus `--permission-mode dontAsk`** — `--allowedTools` alone only suppresses prompts, and under a permissive ambient mode an unlisted `Edit` or `Bash` just runs. Switch to `sonnet`/`haiku` only when the user explicitly asks. Worth surfacing before a large fan-out: a trivial `opus` call still costs ~$0.40, since a non-bare run loads CLAUDE.md, plugins, and skills.
 
 ## Requirements
 
@@ -190,7 +190,10 @@ echo "follow-up question" | codex exec --skip-git-repo-check resume --last 2>"$E
 # --output-format json emits a JSON *array* of events, so take the last one.
 ERRLOG=$(mktemp); OUT=$(mktemp)
 timeout -k 10 600 claude -p "Working directory: /path/to/project. Analyze the architecture and suggest improvements." \
-  --model opus --allowedTools "Read,Glob,Grep" --output-format json \
+  --model opus \
+  --tools "Read,Glob,Grep" --allowedTools "Read,Glob,Grep" \
+  --permission-mode dontAsk --strict-mcp-config \
+  --output-format json \
   < /dev/null >"$OUT" 2>"$ERRLOG"
 rc=$?
 

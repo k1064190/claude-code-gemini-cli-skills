@@ -11,7 +11,13 @@ Spawns a fresh Claude Code CLI run via `claude -p`. The subagent has **no knowle
 
 1. **Default: model `opus`, no `--bare`, `--output-format json`, read-only tools.** Use these for every task and switch **only when the user explicitly asks** (e.g., "use sonnet", "let it edit files"). Model aliases: `opus`, `sonnet`, `haiku`, `fable`; full ids also work (`claude-opus-4-8`, `claude-sonnet-5`, `claude-haiku-4-5`). Cost is worth surfacing before a big fan-out — a *trivial* `opus` prompt measured **$0.41**, because a non-bare run loads CLAUDE.md, plugins, and skills — so for bulk or mechanical work, *propose* `sonnet`/`haiku` and let the user decide. Never downgrade silently.
 2. **Never pass `--bare` on OAuth (subscription) auth.** Bare mode skips OAuth and keychain reads entirely, so it fails with `apiKeySource: "none"` and the result string `"Not logged in · Please run /login"` (exit 1). Verified on Claude Code 2.1.209. `--bare` is safe *only* when the run has a non-OAuth credential source: `ANTHROPIC_API_KEY`, an `apiKeyHelper` supplied via `--settings`, or Bedrock / Google Cloud / Microsoft Foundry provider credentials. The official docs recommend `--bare` for scripts — that advice silently assumes one of those.
-3. **Scope the tools.** `--allowedTools` **auto-approves**; it does not remove a tool. Anything not listed is denied without a prompt when the model reaches for it, so the task quietly does not happen (see [Result contract](#result-contract)). To restrict what the model can reach at all, use `--tools` — but note it covers the **built-in** set only: MCP tools are unaffected, and a non-bare run loads whatever MCP servers the project and user config define. Drop those with `--disallowedTools "mcp__*"` or `--strict-mcp-config`. Start read-only: `--allowedTools "Read,Glob,Grep"`. Ask the user before granting `Edit`, `Write`, or `Bash`.
+3. **`--tools` is the boundary; `--allowedTools` is only a prompt-suppressor.** `--allowedTools` auto-approves what it lists — it does **not** remove anything else. An unlisted tool falls through to the ambient permission mode, and if the machine's settings make that mode permissive (`permissions.defaultMode` of `acceptEdits`, `auto`, or `bypassPermissions`), the subagent is handed the full tool set and its writes are **approved, not denied** — nothing lands in `.permission_denials`, so the gate reports a clean success. Verified against a settings file with `defaultMode: bypassPermissions`: a "read-only" call carrying `--allowedTools "Read,Glob,Grep"` was offered **32 tools, edited the target file, and reported `permission_denials: 0`**. The same call with the flags below ran at `permissionMode: dontAsk` with exactly three tools and left the file untouched.
+
+   A sandbox therefore needs **two** layers, and neither substitutes for the other:
+   - `--tools "Read,Glob,Grep"` — bounds which built-in tools exist at all.
+   - `--permission-mode dontAsk` — pins the ambient mode, so an unlisted call is denied instead of inheriting whatever the machine's settings allow. Without it, a run with `Bash` in `--tools` but only `Bash(git log *)` in `--allowedTools` **executed `touch pwned.txt`** under a permissive mode (`permission_denials: 0`); with it, the same call was denied (`permission_denials: 1`, no file).
+
+   Add `--strict-mcp-config` to drop the project's MCP servers too (verified: `mcp_servers` goes 1 → 0) — `--tools` governs the built-in set, and the docs note MCP tools are not covered by it. Ask the user before widening to `Edit`, `Write`, or `Bash`, and widen `--tools` and `--allowedTools` together.
 4. **Working directory is the shell's cwd** — there is no `-C` flag. `cd` into the target directory, or use `--add-dir <path>`, and state the absolute path in the prompt.
 5. Run the command under a wall-clock `timeout`, with stdin redirected and stderr captured (see [Avoiding hangs](#avoiding-hangs-and-silent-failures)), then check all three failure signals before trusting the output.
 6. **After the run completes**, tell the user the session can be resumed: report the `session_id` and offer a follow-up via `--resume`.
@@ -24,7 +30,10 @@ Capture stdout to a file (never pipe straight into `jq` — that replaces `claud
 ERRLOG=$(mktemp); OUT=$(mktemp)
 timeout -k 10 600 claude -p "your prompt here" \
   --model opus \
+  --tools "Read,Glob,Grep" \
   --allowedTools "Read,Glob,Grep" \
+  --permission-mode dontAsk \
+  --strict-mcp-config \
   --output-format json \
   < /dev/null >"$OUT" 2>"$ERRLOG"
 rc=$?   # not `status`: that name is read-only in fish/zsh
@@ -60,7 +69,9 @@ A run only succeeded if **all three** of these hold. Checking only one lets a fa
 | --- | --- |
 | `rc` (exit code) | Non-zero. `124` = the `timeout` fired, `137` = `-k` had to SIGKILL it. |
 | `.is_error` on the last event | `true` while `subtype` still says `"success"` — and `.result` holds the *error text*, e.g. `"Not logged in · Please run /login"`. A naive reader prints that as if it were the answer. |
-| `.permission_denials \| length` | Non-zero while `is_error` is `false` and `rc` is `0`. The tool was not in `--allowedTools`, so it was denied without a prompt and the work never happened. `.result` may ask for permission — or **claim success anyway**: an observed run answered `"DONE"` with the target file untouched. This field is the only honest signal. |
+| `.permission_denials \| length` | Non-zero while `is_error` is `false` and `rc` is `0`. The tool was not in `--allowedTools`, so it was denied without a prompt and the work never happened. `.result` may ask for permission — or **claim success anyway**: an observed run answered `"DONE"` with the target file untouched. |
+
+The gate catches failures, not over-reach. `.permission_denials` only records tools that were **denied** — under a permissive ambient permission mode there is no denial to record, and an unlisted `Edit` or `Bash` simply runs (see step 3). Bound the tool surface with `--tools`; the gate cannot do it for you.
 
 Other useful fields on the last event: `.session_id`, `.total_cost_usd`, `.num_turns`, and `.structured_output` (with `--json-schema`).
 
@@ -83,12 +94,14 @@ Other useful fields on the last event: `.session_id`, `.total_cost_usd`, `.num_t
 
 Unless a row says otherwise, assume the canonical block: `< /dev/null`, stdout to `$OUT`, stderr to `$ERRLOG`, a `timeout -k` wrapper, `rc=$?`, and the three-signal gate. The diff row deliberately supplies stdin, and the structured-output row reads `.structured_output` instead of `.result`.
 
+Every row also carries `--permission-mode dontAsk` — without it the rows below are suggestions, not limits (see step 3). `--tools` bounds what exists; `--allowedTools` suppresses the prompts for what you intend.
+
 | Use case | Key flags |
 | --- | --- |
-| Read-only analysis (default) | `--model opus --allowedTools "Read,Glob,Grep"` |
-| Apply local edits | `--allowedTools "Read,Edit,Write,Glob,Grep"` (ask the user first) |
-| Code + shell | `--allowedTools "Read,Edit,Bash"` (ask the user first) |
-| Scoped shell only | `--allowedTools "Bash(git log *),Bash(git diff *),Read"` |
+| Read-only analysis (default) | `--model opus --tools "Read,Glob,Grep" --allowedTools "Read,Glob,Grep" --strict-mcp-config` |
+| Apply local edits | `--tools "Read,Edit,Write,Glob,Grep" --allowedTools "Read,Edit,Write,Glob,Grep"` (ask the user first) |
+| Code + shell | `--tools "Read,Edit,Bash" --allowedTools "Read,Edit,Bash"` (ask the user first) |
+| Scoped shell only | `--tools "Read,Bash" --allowedTools "Bash(git log *),Bash(git diff *),Read"` — `--tools` keeps `Bash` in reach, `--allowedTools` narrows it to those commands, `dontAsk` denies the rest |
 | Cheap mechanical task | `--model haiku` |
 | Review a diff | `git diff main \| claude -p "review this diff" …` (real pipe: omit `< /dev/null`) |
 | Structured result | `--json-schema '{…}'`, then read `.structured_output` |
@@ -112,7 +125,9 @@ IS_ERR=$(printf '%s' "$LAST" | jq -r 'if .is_error == false then "false" else "t
 DENIALS=$(printf '%s' "$LAST" | jq -r '(.permission_denials // []) | length')
 if [ "$rc" -ne 0 ] || [ "$IS_ERR" != false ] || [ "$DENIALS" != 0 ]; then
   echo "resume FAILED — exit=$rc is_error=$IS_ERR denials=$DENIALS" >&2
-  cat "$ERRLOG" >&2; rm -f "$OUT" "$ERRLOG"; exit 1
+  printf '%s' "$LAST" | jq -r '.result // "(no result)"' >&2   # the cause often lives here, not in stderr
+  cat "$ERRLOG" >&2
+  rm -f "$OUT" "$ERRLOG"; exit 1
 fi
 printf '%s' "$LAST" | jq -r '.result'
 rm -f "$OUT" "$ERRLOG"
