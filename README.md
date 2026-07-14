@@ -38,7 +38,7 @@ Delegate tasks from Claude to OpenAI Codex CLI running as an independent agent. 
 Delegate tasks to a fresh Claude Code CLI run (`claude -p`). Useful for:
 
 - **Clean context** — A cold instance reads the code without the current conversation's assumptions
-- **Scoped permissions** — `--allowedTools` limits a run to exactly the tools it needs
+- **Scoped permissions** — `--allowedTools` auto-approves exactly the tools a run needs; anything else is denied without a prompt (use `--tools` to restrict the built-in set itself)
 - **Parallel execution** — Run several `claude -p` instances concurrently via parallel Bash calls
 - **Orchestration from other CLIs** — Codex or Antigravity can call Claude for a subtask
 
@@ -132,7 +132,7 @@ Or symlink them:
 ln -s $(pwd)/antigravity-subagent ~/.claude/skills/antigravity-subagent
 ln -s $(pwd)/gemini-subagent      ~/.claude/skills/gemini-subagent
 ln -s $(pwd)/codex-subagent       ~/.claude/skills/codex-subagent
-ln -s $(pwd)/claude-subagent      ~/.claude/skills/claude-subagent
+ln -s "$(pwd)/claude-subagent"    ~/.claude/skills/claude-subagent
 ```
 
 ## Quick start
@@ -200,26 +200,24 @@ LAST=$(jq -c 'if type=="array" then last else . end' "$OUT" 2>/dev/null)
 IS_ERR=$(printf '%s' "$LAST" | jq -r 'if .is_error == false then "false" else "true" end')
 DENIALS=$(printf '%s' "$LAST" | jq -r '(.permission_denials // []) | length')
 if [ "$rc" -ne 0 ] || [ "$IS_ERR" != false ] || [ "$DENIALS" != 0 ]; then
-  echo "FAILED — exit=$rc is_error=$IS_ERR denials=$DENIALS"; cat "$ERRLOG"
+  echo "FAILED — exit=$rc is_error=$IS_ERR denials=$DENIALS" >&2
+  printf '%s' "$LAST" | jq -r '.result // "(no result)"' >&2   # error text, not an answer
+  cat "$ERRLOG" >&2
+  rm -f "$OUT" "$ERRLOG"
+  exit 1
 fi
+
 printf '%s' "$LAST" | jq -r '.result'
-
-# Follow up in the same session (read the id before deleting $OUT)
-SID=$(printf '%s' "$LAST" | jq -r '.session_id')
-timeout -k 10 600 claude -p "Now focus on the database queries." --resume "$SID" \
-  --output-format json < /dev/null >"$OUT" 2>"$ERRLOG"
-jq -r 'if type=="array" then last else . end | .result' "$OUT"
-
-# Review a diff (a real pipe supplies EOF — omit `< /dev/null`)
-set -o pipefail   # otherwise a failing `git diff` is invisible and Claude just gets empty stdin
-git diff main | timeout -k 10 600 claude -p "Review this diff for bugs." \
-  --model opus --output-format json >"$OUT" 2>"$ERRLOG"
-rc=$?
-jq -r 'if type=="array" then last else . end | .result' "$OUT"
+SID=$(printf '%s' "$LAST" | jq -r '.session_id')   # keep for --resume
 rm -f "$OUT" "$ERRLOG"
 ```
 
-Never end a `claude -p` call with `| jq`: the pipeline's exit code becomes jq's, so a run killed by `timeout` prints nothing and exits 0 — indistinguishable from a clean run with nothing to say. Redirect to a file, check the exit code, then run `jq` against the file. Full rules in [`claude-subagent/SKILL.md`](./claude-subagent/SKILL.md).
+Two rules the snippet encodes, both learned the hard way:
+
+- **Never end a `claude -p` call with `| jq`.** The pipeline's exit code becomes jq's, so a run killed by `timeout` prints nothing and exits 0 — indistinguishable from a clean run with nothing to say. Redirect to a file, capture `rc`, then run `jq` against the file.
+- **Never fall through to `.result` after a failed gate, and never exit 0 on one.** The failure text (`"Not logged in · Please run /login"`, or an observed false `"DONE"` from a denied edit) is a plausible-looking string; printed on stdout it reads as the answer.
+
+`--resume "$SID"` continues the session and `git diff main | claude -p …` reviews a diff (a real pipe supplies EOF, so drop `< /dev/null` — and `set -o pipefail`, or a failing `git diff` silently becomes empty stdin). Both need the same gate; the runnable forms are in [`claude-subagent/SKILL.md`](./claude-subagent/SKILL.md).
 
 A `claude -p` run can fail while still exiting 0 — check `.is_error` (auth failures land in `.result` as text) and `.permission_denials` (a tool missing from `--allowedTools` is denied silently). See [`claude-subagent/SKILL.md`](./claude-subagent/SKILL.md).
 
@@ -259,8 +257,8 @@ Reasoning effort defaults to `high`; valid values are `xhigh`, `high`, `medium`,
 | `--model` value | When to use |
 |-----------------|-------------|
 | `opus` | **Default for every task.** |
-| `sonnet` | Balanced — when the user asks, or for long mechanical runs. |
-| `haiku` | Cheapest/fastest — simple lookups and scripted checks. |
+| `sonnet` | Balanced. Only when the user asks — for bulk or mechanical work, propose it and let them decide. |
+| `haiku` | Cheapest/fastest. Only when the user asks. |
 | `fable` | Only when the user explicitly asks for it. |
 
 Aliases resolve to the latest model in each family; full ids (`claude-opus-4-8`, `claude-sonnet-5`, `claude-haiku-4-5`) also work.

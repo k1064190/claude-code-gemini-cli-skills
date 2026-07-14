@@ -10,8 +10,8 @@ Spawns a fresh Claude Code CLI run via `claude -p`. The subagent has **no knowle
 ## Running a Task
 
 1. **Default: model `opus`, no `--bare`, `--output-format json`, read-only tools.** Use these for every task and switch **only when the user explicitly asks** (e.g., "use sonnet", "let it edit files"). Model aliases: `opus`, `sonnet`, `haiku`, `fable`; full ids also work (`claude-opus-4-8`, `claude-sonnet-5`, `claude-haiku-4-5`). Cost is worth surfacing before a big fan-out — a *trivial* `opus` prompt measured **$0.41**, because a non-bare run loads CLAUDE.md, plugins, and skills — so for bulk or mechanical work, *propose* `sonnet`/`haiku` and let the user decide. Never downgrade silently.
-2. **Never pass `--bare` unless `ANTHROPIC_API_KEY` is set.** Bare mode skips OAuth and keychain reads entirely, so on a subscription (OAuth) machine it fails with `apiKeySource: "none"` and the result string `"Not logged in · Please run /login"` (exit 1). The official docs recommend `--bare` for scripts; that advice only applies to API-key auth. Verified on Claude Code 2.1.209.
-3. **Scope the tools.** `--allowedTools` auto-approves; anything not listed is denied without a prompt and the task silently does not happen (see [Result contract](#result-contract)). Use `--tools` to restrict which tools exist at all. Start read-only: `--allowedTools "Read,Glob,Grep"`. Ask the user before granting `Edit`, `Write`, or `Bash`.
+2. **Never pass `--bare` on OAuth (subscription) auth.** Bare mode skips OAuth and keychain reads entirely, so it fails with `apiKeySource: "none"` and the result string `"Not logged in · Please run /login"` (exit 1). Verified on Claude Code 2.1.209. `--bare` is safe *only* when the run has a non-OAuth credential source: `ANTHROPIC_API_KEY`, an `apiKeyHelper` supplied via `--settings`, or Bedrock / Google Cloud / Microsoft Foundry provider credentials. The official docs recommend `--bare` for scripts — that advice silently assumes one of those.
+3. **Scope the tools.** `--allowedTools` **auto-approves**; it does not remove a tool. Anything not listed is denied without a prompt when the model reaches for it, so the task quietly does not happen (see [Result contract](#result-contract)). To restrict what the model can reach at all, use `--tools` — but note it covers the **built-in** set only: MCP tools are unaffected, and a non-bare run loads whatever MCP servers the project and user config define. Drop those with `--disallowedTools "mcp__*"` or `--strict-mcp-config`. Start read-only: `--allowedTools "Read,Glob,Grep"`. Ask the user before granting `Edit`, `Write`, or `Bash`.
 4. **Working directory is the shell's cwd** — there is no `-C` flag. `cd` into the target directory, or use `--add-dir <path>`, and state the absolute path in the prompt.
 5. Run the command under a wall-clock `timeout`, with stdin redirected and stderr captured (see [Avoiding hangs](#avoiding-hangs-and-silent-failures)), then check all three failure signals before trusting the output.
 6. **After the run completes**, tell the user the session can be resumed: report the `session_id` and offer a follow-up via `--resume`.
@@ -37,14 +37,18 @@ DENIALS=$(printf '%s' "$LAST" | jq -r '(.permission_denials // []) | length')
 SID=$(printf '%s' "$LAST" | jq -r '.session_id // empty')   # keep for --resume
 
 if [ "$rc" -ne 0 ] || [ "$IS_ERR" != false ] || [ "$DENIALS" != 0 ]; then
-  echo "claude subagent FAILED — exit=$rc is_error=$IS_ERR denials=$DENIALS"
-  printf '%s' "$LAST" | jq -r '.result // "(no result)"'   # error text, not an answer
-  cat "$ERRLOG"
-else
-  printf '%s' "$LAST" | jq -r '.result'
+  echo "claude subagent FAILED — exit=$rc is_error=$IS_ERR denials=$DENIALS" >&2
+  printf '%s' "$LAST" | jq -r '.result // "(no result)"' >&2   # error text, not an answer
+  cat "$ERRLOG" >&2
+  rm -f "$OUT" "$ERRLOG"
+  exit 1            # never fall through to .result, and never exit 0 on a failed run
 fi
+
+printf '%s' "$LAST" | jq -r '.result'
 rm -f "$OUT" "$ERRLOG"   # only after reading them — the error log is the diagnosis
 ```
+
+The early `exit 1` matters twice over. It stops the failure text (`"Not logged in · Please run /login"`, or the observed false `"DONE"`) from being printed on stdout as if it were the answer, and it gives the caller an exit status they can branch on — a run that detects a failure and still exits 0 is exactly the hazard this skill exists to remove. In a function, `return 1`; if the snippet is inlined where `exit` would kill the parent shell, set a flag instead and check it.
 
 ## Result contract
 
@@ -101,9 +105,20 @@ ERRLOG=$(mktemp); OUT=$(mktemp)
 timeout -k 10 600 claude -p "follow-up question" --resume "$SID" \
   --output-format json < /dev/null >"$OUT" 2>"$ERRLOG"
 rc=$?
-jq -r 'if type=="array" then last else . end | .result' "$OUT"   # plus the same three checks
+
+LAST=$(jq -c 'if type=="array" then last else . end' "$OUT" 2>/dev/null)
+[ -z "$LAST" ] && LAST='{}'
+IS_ERR=$(printf '%s' "$LAST" | jq -r 'if .is_error == false then "false" else "true" end')
+DENIALS=$(printf '%s' "$LAST" | jq -r '(.permission_denials // []) | length')
+if [ "$rc" -ne 0 ] || [ "$IS_ERR" != false ] || [ "$DENIALS" != 0 ]; then
+  echo "resume FAILED — exit=$rc is_error=$IS_ERR denials=$DENIALS" >&2
+  cat "$ERRLOG" >&2; rm -f "$OUT" "$ERRLOG"; exit 1
+fi
+printf '%s' "$LAST" | jq -r '.result'
 rm -f "$OUT" "$ERRLOG"
 ```
+
+The gate is repeated rather than referenced: a resumed run fails the same three ways, and each Bash invocation is a fresh shell, so a snippet that omits the gate omits it for real.
 
 `--resume "$SID"` reuses the same session id and remembers the earlier turns (verified: the subagent recalled a codeword set in the first call). Run the follow-up **from the same directory** as the original — session lookup is scoped to the project directory and its git worktrees. `--continue` picks the most recent session in the cwd without capturing an id; `--fork-session` branches instead of appending.
 
