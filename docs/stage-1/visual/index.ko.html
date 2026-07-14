@@ -257,6 +257,10 @@
             <span class="node-dot future"></span>
             <span class="node-label">2단계</span>
           </li>
+          <li class="timeline-node">
+            <span class="node-dot future"></span>
+            <span class="node-label">3단계</span>
+          </li>
         </ol>
       </nav>
 
@@ -346,6 +350,57 @@
                 문서와 각 CLI 자체의 <code>--help</code> 출력과 교차
                 검증했습니다.
               </p>
+            </section>
+
+            <section class="field">
+              <h4>리뷰 루프</h4>
+              <p>
+                CLAUDE.md 규정에 따라 세 명의 리뷰어가 참여했습니다:
+                <code>code-reviewer-pro</code> 서브에이전트,
+                <code>codex</code> (PR #3의 GitHub 봇),
+                <code>antigravity-subagent</code>(agy).
+              </p>
+              <ul>
+                <li>
+                  <strong>1차(code-reviewer-pro + codex):</strong> 두 리뷰어가
+                  공통으로 지적한 사항을 수정했습니다 &mdash; 인라인 스니펫의
+                  정의되지 않은 <code>$ERRLOG</code>(하드 bash 오류로 검증됨),
+                  병렬 실행 블록의 일관되지 않은 stderr 처리, fish/zsh의 읽기
+                  전용 <code>$status</code>와 충돌하는
+                  <code>status</code> 변수(<code>rc</code>로 이름 변경),
+                  &quot;resume에는 플래그를 쓸 수 없다&quot;는 잘못된 주장
+                  (<code>resume --help</code>로 정정). codex 봇이 지적한 병렬
+                  <code>$ERRLOG</code> 관련 P2는 각 병렬 호출을 독립적으로
+                  만들어 해결했습니다. 근거를 들어 기각한 사항: codex의
+                  <code>--add-dir</code> 관련 P2와 resume의 stdin
+                  <code>-</code> 처리에 관한 주장은 모두 표적 테스트로
+                  반증되었습니다.
+                </li>
+                <li>
+                  <strong>2차(agy 리뷰):</strong> agy로 diff를 리뷰한 결과 실제
+                  결함 두 가지가 드러났습니다 &mdash; 위치 인자 형태의
+                  <code>resume --last</code>에 <code>&lt; /dev/null</code>이
+                  빠져 있었고, resume 예제들이 새로 도입한 stderr 캡처 규칙과
+                  어긋나게 여전히 <code>2&gt;/dev/null</code>을 사용하고
+                  있었습니다. 둘 다 수정했습니다.
+                </li>
+                <li>
+                  <strong
+                    >가장 큰 사건 &mdash; agy의 &quot;리뷰가 40분 걸린다&quot;
+                    멈춤:</strong
+                  >
+                  스크래치 디렉터리에서 agy에게 <code>@final.diff</code>를
+                  넘기자 agy의 에이전트가 파일을 찾기 위해
+                  <code>$HOME</code> 전체를 훑는 <code>find</code>를
+                  실행했습니다. <code>timeout -k</code>는 agy를 종료시켰지만 그
+                  손자 프로세스는 종료시키지 못했고, 이 프로세스가
+                  <code>RESULT=$(&hellip;)</code> 파이프를 약 40분간 열어둔 채
+                  붙잡고 있었습니다(<code>/proc/&lt;pid&gt;/fd</code>의 파이프
+                  아이노드 소유권으로 확인). agy의 stdout을 커맨드 치환 대신
+                  파일로 캡처하고, agy가 파일을 찾아 헤매게 하지 않는 방식으로
+                  해결했습니다.
+                </li>
+              </ul>
             </section>
 
             <section class="field">

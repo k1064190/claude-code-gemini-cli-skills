@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>claude-code-gemini-cli-skills — Staged plan progress</title>
+    <style>
+      :root {
+        --bg: #f7f7f5;
+        --surface: #ffffff;
+        --border: #e3e2dd;
+        --text: #2b2b28;
+        --muted: #6f6f6a;
+        --accent: #0f6f66;
+        --accent-dark: #0b544e;
+        --muted-fill: #b9b9b3;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
+          "Malgun Gothic", "Noto Sans KR", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6;
+        padding: 2.5rem 1.5rem 4rem;
+      }
+
+      .page {
+        max-width: 880px;
+        margin: 0 auto;
+      }
+
+      header.site-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 2.5rem;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+        margin: 0 0 0.25rem;
+      }
+
+      .subtitle {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      nav.lang-switch {
+        font-size: 0.9rem;
+      }
+
+      nav.lang-switch .current {
+        color: var(--muted);
+      }
+
+      nav.lang-switch a {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      nav.lang-switch a:hover,
+      nav.lang-switch a:focus {
+        text-decoration: underline;
+      }
+
+      nav.timeline {
+        margin-bottom: 3rem;
+      }
+
+      ol.timeline-track {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        position: relative;
+        display: flex;
+      }
+
+      ol.timeline-track::before {
+        content: "";
+        position: absolute;
+        top: 9px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: var(--border);
+      }
+
+      li.timeline-node {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 96px;
+      }
+
+      .node-dot {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--surface);
+        border: 2px solid var(--border);
+      }
+
+      .node-dot.muted {
+        background: var(--muted-fill);
+        border-color: var(--muted-fill);
+      }
+
+      .node-dot.future {
+        background: var(--surface);
+        border-color: var(--accent);
+      }
+
+      li.timeline-node.active .node-dot {
+        background: var(--accent);
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(15, 111, 102, 0.18);
+      }
+
+      .node-label {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      li.timeline-node.active .node-label {
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      h2 {
+        font-size: 1.25rem;
+        color: var(--accent-dark);
+        margin: 0 0 0.5rem;
+      }
+
+      .stage-summary {
+        color: var(--muted);
+        margin: 0 0 1.75rem;
+      }
+
+      .card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 1.5rem;
+      }
+
+      article.card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1.75rem;
+      }
+
+      article.card h3 {
+        margin: 0 0 1.25rem;
+        font-size: 1.1rem;
+      }
+
+      .field {
+        margin-bottom: 1.25rem;
+      }
+
+      .field:last-child {
+        margin-bottom: 0;
+      }
+
+      .field h4 {
+        margin: 0 0 0.4rem;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--accent);
+      }
+
+      .field p,
+      .field ul,
+      .field ol {
+        margin: 0;
+      }
+
+      .field p + p {
+        margin-top: 0.75rem;
+      }
+
+      .field ul,
+      .field ol {
+        padding-left: 1.2rem;
+      }
+
+      .field li + li {
+        margin-top: 0.5rem;
+      }
+
+      ul.code-list {
+        list-style: none;
+        padding-left: 0;
+      }
+
+      code {
+        font-family:
+          "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        background: #f0efe9;
+        padding: 0.1rem 0.35rem;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
+
+      .field table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.92rem;
+        margin-top: 0.5rem;
+      }
+
+      .field th,
+      .field td {
+        text-align: left;
+        padding: 0.5rem 0.6rem;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+
+      .field th {
+        color: var(--accent);
+        font-weight: 600;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .retro {
+        font-style: italic;
+        color: var(--muted);
+      }
+
+      @media (max-width: 720px) {
+        header.site-header {
+          flex-direction: column;
+        }
+
+        .card-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .field table,
+        .field thead,
+        .field tbody,
+        .field th,
+        .field td,
+        .field tr {
+          display: block;
+        }
+
+        .field thead {
+          display: none;
+        }
+
+        .field tr {
+          border-bottom: 1px solid var(--border);
+          padding-bottom: 0.5rem;
+          margin-bottom: 0.5rem;
+        }
+
+        .field td {
+          border-bottom: none;
+          padding: 0.15rem 0;
+        }
+
+        .field td::before {
+          content: attr(data-label);
+          display: block;
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          color: var(--accent);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="site-header">
+        <div>
+          <h1>claude-code-gemini-cli-skills</h1>
+          <p class="subtitle">Staged plan progress</p>
+        </div>
+        <nav aria-label="Language" class="lang-switch">
+          <span class="current">EN</span> | <a href="index.ko.html">한국어</a>
+        </nav>
+      </header>
+
+      <nav class="timeline" aria-label="Stages">
+        <ol class="timeline-track">
+          <li class="timeline-node">
+            <span class="node-dot muted"></span>
+            <span class="node-label">Stage 1</span>
+          </li>
+          <li class="timeline-node">
+            <span class="node-dot muted"></span>
+            <span class="node-label">Stage 2</span>
+          </li>
+          <li class="timeline-node active">
+            <span class="node-dot"></span>
+            <span class="node-label">Stage 3</span>
+          </li>
+        </ol>
+      </nav>
+
+      <section aria-labelledby="stage-3-heading">
+        <h2 id="stage-3-heading">Stage 3</h2>
+        <p class="stage-summary">
+          Adds a <code>claude -p</code> subagent skill for isolated,
+          cold-instance runs, correcting three claims the official docs got
+          wrong.
+        </p>
+
+        <div class="card-grid">
+          <article class="card">
+            <h3>Claude Subagent Skill</h3>
+
+            <section class="field">
+              <h4>Why</h4>
+              <p>
+                The repo delegated to three external CLIs (<code>codex</code>,
+                <code>gemini</code>, <code>agy</code>) but not to Claude Code
+                itself. A <code>claude -p</code> subagent is worth having for
+                isolation, not a second opinion: a cold instance with no
+                conversation history, scoped <code>--allowedTools</code>, and
+                its own process &mdash; useful for parallel subtasks,
+                permission-limited edits, and orchestration from
+                Codex/Antigravity.
+              </p>
+              <p>
+                An older private copy existed at
+                <code>~/.claude/skills/claude-subagent</code> (written
+                2026-05-03, never in this repo). It was checked against the live
+                CLI and found wrong in three load-bearing ways, so it was
+                rewritten from the current docs plus measurement, and the old
+                copy was deleted.
+              </p>
+            </section>
+
+            <section class="field">
+              <h4>What</h4>
+              <ul>
+                <li>
+                  <code>claude-subagent/SKILL.md</code> &mdash; new skill.
+                  Default: <code>--model opus</code>, no <code>--bare</code>,
+                  <code>--output-format json</code>, read-only
+                  <code>--allowedTools "Read,Glob,Grep"</code>.
+                </li>
+                <li>
+                  <code>README.md</code> &mdash; Skills / Defaults /
+                  Requirements / Installation / Quick start / Models / Tested on
+                  now cover Claude.
+                </li>
+                <li>
+                  Three findings that contradict both the old skill and the
+                  official docs, each reproduced before being written down:
+                  <table>
+                    <thead>
+                      <tr>
+                        <th scope="col">Finding</th>
+                        <th scope="col">Evidence</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td data-label="Finding">
+                          <code>--bare</code> is unusable on subscription auth.
+                          Bare mode skips OAuth and keychain reads entirely; the
+                          docs recommend it for scripts, but that assumes
+                          API-key auth.
+                        </td>
+                        <td data-label="Evidence">
+                          <code>claude --bare -p &hellip;</code> &rarr; exit 1,
+                          <code>apiKeySource: "none"</code>,
+                          <code>.result</code> = &quot;Not logged in &middot;
+                          Please run /login&quot;.
+                        </td>
+                      </tr>
+                      <tr>
+                        <td data-label="Finding">
+                          <code>--output-format json</code> emits a JSON
+                          <em>array</em> of events on 2.1.209, not the single
+                          object the docs describe.
+                          <code>jq -r '.result'</code> &mdash; the official
+                          form, and the old skill&rsquo;s &mdash; fails with
+                          <code>Cannot index array with string "result"</code>.
+                        </td>
+                        <td data-label="Evidence">
+                          Reproduced in a clean env (<code>env -i</code>), so it
+                          is not an artifact of nesting inside Claude Code. Fix:
+                          <code
+                            >jq -r 'if type=="array" then last else . end |
+                            .result'</code
+                          >.
+                        </td>
+                      </tr>
+                      <tr>
+                        <td data-label="Finding">
+                          A run can fail while exiting 0.
+                          <code>.is_error</code> can be <code>true</code> with
+                          <code>subtype: "success"</code>, and a tool missing
+                          from <code>--allowedTools</code> is denied silently.
+                        </td>
+                        <td data-label="Evidence">
+                          Auth failure puts the error prose in
+                          <code>.result</code>. A denied edit answered
+                          &quot;DONE&quot; with the file untouched &mdash;
+                          <code>.permission_denials</code> was the only honest
+                          signal.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </li>
+              </ul>
+            </section>
+
+            <section class="field">
+              <h4>How</h4>
+              <p>
+                Evidence first, prose second: every claim in the skill was run
+                before it was written. Five core tests (Doctor Cho&rsquo;s scope
+                call), plus a dogfood pass.
+              </p>
+              <ol>
+                <li>
+                  <strong>T1 canonical call</strong> (<code>--model opus</code>)
+                  &rarr; exit 0, <code>is_error=false</code>, $0.41 for a
+                  trivial prompt (a non-bare run loads CLAUDE.md, plugins,
+                  skills &mdash; hence the <code>haiku</code>/<code
+                    >sonnet</code
+                  >
+                  guidance).
+                </li>
+                <li>
+                  <strong>T2 <code>--bare</code></strong> &rarr; the auth
+                  failure above.
+                </li>
+                <li>
+                  <strong>T3 stdin.</strong> The first design was
+                  <strong>wrong</strong>:
+                  <code>sleep 300 | claude &hellip;</code> timed out, but
+                  <code>timeout</code> was wrapping the whole pipeline, so the
+                  124 came from <code>sleep</code>, not Claude. Redone with a
+                  FIFO held open by a background writer so
+                  <code>timeout</code> wrapped Claude alone: stdin open but
+                  <strong>empty</strong> exits cleanly (10s, unlike
+                  <code>codex</code>, which hangs here); stdin
+                  <strong>carrying data</strong> with no EOF blocks forever
+                  before any work happens (0 bytes out, killed at 60s); a normal
+                  pipe (EOF) works and the piped text reaches the model. So the
+                  rule is <code>&lt; /dev/null</code> on every call except a
+                  deliberate pipe &mdash; same conclusion as stage 1, for a
+                  narrower reason.
+                </li>
+                <li>
+                  <strong>T4 <code>--allowedTools</code></strong> &rarr; a
+                  denied edit leaves the file untouched,
+                  <code>permission_denials: 1</code>; an allowed edit changes
+                  the file. The child session runs at
+                  <code>permissionMode: default</code> and does
+                  <strong>not</strong> inherit the parent&rsquo;s
+                  <code>auto</code>.
+                </li>
+                <li>
+                  <strong>T5 <code>--resume</code></strong> &rarr;
+                  <code>session_id</code> captured from the result event; the
+                  follow-up recalled a codeword from the first call and reused
+                  the same id.
+                </li>
+              </ol>
+              <p>
+                <strong>Dogfood.</strong> The skill&rsquo;s own canonical
+                invocation was then used to have a fresh
+                <code>claude -p</code> audit <code>SKILL.md</code>. It found
+                five real defects &mdash; undefined <code>$ERRLOG</code> in a
+                copy-pasteable snippet, a resume example reading a file the
+                canonical snippet had already <code>rm</code>&rsquo;d, cleanup
+                destroying the error log the doc tells you to read, and, worst,
+                the canonical block performing none of the three checks the doc
+                demands. It also caught that ending a call with
+                <code>| jq</code> replaces Claude&rsquo;s exit code with
+                jq&rsquo;s, so a <code>timeout</code> kill prints nothing and
+                exits 0 &mdash; a hang indistinguishable from a quiet success.
+              </p>
+              <p>
+                <strong>Self-inflicted bug, caught by testing.</strong> The
+                rewritten block used <code>.is_error // true</code> as a
+                fail-closed default. jq&rsquo;s <code>//</code> replaces
+                <code>false</code> as well as <code>null</code>, so a
+                <em>clean</em> run reported <code>is_error=true</code>.
+                Extracting the block straight out of <code>SKILL.md</code> and
+                running it on four paths (success / auth failure / denial /
+                timeout) surfaced it immediately; the fix is an explicit
+                <code>if .is_error == false</code>.
+              </p>
+            </section>
+
+            <section class="field">
+              <h4>Review loop</h4>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Reviewer</th>
+                    <th scope="col">Outcome</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td data-label="Reviewer">
+                      <code>code-reviewer</code> subagent
+                    </td>
+                    <td data-label="Outcome">
+                      1 finding, <strong>fixed</strong>: the README quick-start
+                      still ended its calls with <code>| jq</code>, violating
+                      the rule the same diff had just introduced.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td data-label="Reviewer"><code>codex-subagent</code></td>
+                    <td data-label="Outcome">
+                      6 findings. <strong>Fixed 5</strong>: missing
+                      <code>rc</code>/signal capture in the README snippet;
+                      <code>git diff | claude</code> swallowing a failing
+                      <code>git diff</code> (fixed with
+                      <code>set -o pipefail</code>); a model policy that
+                      licensed a silent cost-based downgrade while also saying
+                      &quot;switch only on explicit request&quot; (now: propose,
+                      never switch silently); a Quick Reference preamble
+                      contradicting its own rows; stale README line numbers.
+                      <strong>Dismissed 1</strong>: objected to recording the
+                      <code>~/.claude/skills/</code> cleanup here as out of the
+                      diff &mdash; kept, reworded as a local action outside the
+                      repo.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td data-label="Reviewer">
+                      <code>antigravity-subagent</code>
+                    </td>
+                    <td data-label="Outcome">
+                      <code>NO DEFECTS</code> &mdash; but only on the fourth
+                      attempt. Three <code>@claude-subagent/SKILL.md</code>
+                      runs died with a timeout error until the file&rsquo;s
+                      content was inlined into the prompt instead of referenced
+                      by path, reconfirming the stage-1 &quot;don&rsquo;t make
+                      agy hunt for files&quot; caveat.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p>
+                <strong>Blocked, reported, not fixed here:</strong> the
+                <code>codex-subagent</code> default from stage 2,
+                <code>gpt-5.6-sol</code>, is now rejected outright (400
+                &quot;not supported when using Codex with a ChatGPT
+                account&quot;, codex-cli 0.144.3); <code>gpt-5.5</code> works
+                and was used for the codex review above. Fixing the stage-2
+                default is out of scope for this stage.
+              </p>
+            </section>
+
+            <section class="field">
+              <h4>Code locations</h4>
+              <ul class="code-list">
+                <li>
+                  <code>claude-subagent/SKILL.md</code> &mdash; the skill.
+                  Canonical block (three-signal gate, stdin redirect,
+                  <code>timeout -k</code>, cleanup after reading) under
+                  &quot;Canonical safe invocation&quot;; the traps in
+                  &quot;Result contract&quot;; the stdin/timeout/pipe rules in
+                  &quot;Avoiding hangs and silent failures&quot;.
+                </li>
+                <li>
+                  <code>README.md:54</code> (Defaults &rarr; Claude),
+                  <code>:185</code> (Quick start &rarr; Claude),
+                  <code>:257</code> (Models &rarr; Claude), <code>:328</code>
+                  (Tested on).
+                </li>
+                <li>
+                  Outside the repo (local install, not in the diff): the stale
+                  private copy at
+                  <code>~/.claude/skills/claude-subagent/</code> was deleted and
+                  replaced by a symlink to <code>claude-subagent/</code>
+                  here, so the installed skill and the tracked one can no longer
+                  drift apart.
+                </li>
+              </ul>
+            </section>
+
+            <section class="field">
+              <h4>Retrospective</h4>
+              <p class="retro">
+                Two of the three headline findings contradict the official
+                documentation, and neither was discoverable by reading &mdash;
+                the JSON-array shape and the exit-0 failures only appear when
+                you run the command and check the exit code. The dogfood pass
+                earned its cost: a skill that preaches &quot;check all three
+                signals&quot; shipped a canonical snippet checking none, and
+                only an outside reader caught it. Worth repeating: extract
+                snippets from the doc and execute them, rather than testing a
+                retyped copy that quietly fixes what the doc got wrong.
+              </p>
+            </section>
+          </article>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>claude-code-gemini-cli-skills — 단계별 진행 상황</title>
+    <style>
+      :root {
+        --bg: #f7f7f5;
+        --surface: #ffffff;
+        --border: #e3e2dd;
+        --text: #2b2b28;
+        --muted: #6f6f6a;
+        --accent: #0f6f66;
+        --accent-dark: #0b544e;
+        --muted-fill: #b9b9b3;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
+          "Malgun Gothic", "Noto Sans KR", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6;
+        padding: 2.5rem 1.5rem 4rem;
+      }
+
+      .page {
+        max-width: 880px;
+        margin: 0 auto;
+      }
+
+      header.site-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 2.5rem;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+        margin: 0 0 0.25rem;
+      }
+
+      .subtitle {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
+      nav.lang-switch {
+        font-size: 0.9rem;
+      }
+
+      nav.lang-switch .current {
+        color: var(--muted);
+      }
+
+      nav.lang-switch a {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      nav.lang-switch a:hover,
+      nav.lang-switch a:focus {
+        text-decoration: underline;
+      }
+
+      nav.timeline {
+        margin-bottom: 3rem;
+      }
+
+      ol.timeline-track {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        position: relative;
+        display: flex;
+      }
+
+      ol.timeline-track::before {
+        content: "";
+        position: absolute;
+        top: 9px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: var(--border);
+      }
+
+      li.timeline-node {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 96px;
+      }
+
+      .node-dot {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--surface);
+        border: 2px solid var(--border);
+      }
+
+      .node-dot.muted {
+        background: var(--muted-fill);
+        border-color: var(--muted-fill);
+      }
+
+      .node-dot.future {
+        background: var(--surface);
+        border-color: var(--accent);
+      }
+
+      li.timeline-node.active .node-dot {
+        background: var(--accent);
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(15, 111, 102, 0.18);
+      }
+
+      .node-label {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      li.timeline-node.active .node-label {
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      h2 {
+        font-size: 1.25rem;
+        color: var(--accent-dark);
+        margin: 0 0 0.5rem;
+      }
+
+      .stage-summary {
+        color: var(--muted);
+        margin: 0 0 1.75rem;
+      }
+
+      .card-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 1.5rem;
+      }
+
+      article.card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1.75rem;
+      }
+
+      article.card h3 {
+        margin: 0 0 1.25rem;
+        font-size: 1.1rem;
+      }
+
+      .field {
+        margin-bottom: 1.25rem;
+      }
+
+      .field:last-child {
+        margin-bottom: 0;
+      }
+
+      .field h4 {
+        margin: 0 0 0.4rem;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--accent);
+      }
+
+      .field p,
+      .field ul,
+      .field ol {
+        margin: 0;
+      }
+
+      .field p + p {
+        margin-top: 0.75rem;
+      }
+
+      .field ul,
+      .field ol {
+        padding-left: 1.2rem;
+      }
+
+      .field li + li {
+        margin-top: 0.5rem;
+      }
+
+      ul.code-list {
+        list-style: none;
+        padding-left: 0;
+      }
+
+      code {
+        font-family:
+          "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        background: #f0efe9;
+        padding: 0.1rem 0.35rem;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
+
+      .field table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.92rem;
+        margin-top: 0.5rem;
+      }
+
+      .field th,
+      .field td {
+        text-align: left;
+        padding: 0.5rem 0.6rem;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+
+      .field th {
+        color: var(--accent);
+        font-weight: 600;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .retro {
+        font-style: italic;
+        color: var(--muted);
+      }
+
+      @media (max-width: 720px) {
+        header.site-header {
+          flex-direction: column;
+        }
+
+        .card-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .field table,
+        .field thead,
+        .field tbody,
+        .field th,
+        .field td,
+        .field tr {
+          display: block;
+        }
+
+        .field thead {
+          display: none;
+        }
+
+        .field tr {
+          border-bottom: 1px solid var(--border);
+          padding-bottom: 0.5rem;
+          margin-bottom: 0.5rem;
+        }
+
+        .field td {
+          border-bottom: none;
+          padding: 0.15rem 0;
+        }
+
+        .field td::before {
+          content: attr(data-label);
+          display: block;
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          color: var(--accent);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="site-header">
+        <div>
+          <h1>claude-code-gemini-cli-skills</h1>
+          <p class="subtitle">단계별 진행 상황</p>
+        </div>
+        <nav aria-label="언어" class="lang-switch">
+          <a href="index.html">EN</a> | <span class="current">한국어</span>
+        </nav>
+      </header>
+
+      <nav class="timeline" aria-label="단계">
+        <ol class="timeline-track">
+          <li class="timeline-node">
+            <span class="node-dot muted"></span>
+            <span class="node-label">1단계</span>
+          </li>
+          <li class="timeline-node">
+            <span class="node-dot muted"></span>
+            <span class="node-label">2단계</span>
+          </li>
+          <li class="timeline-node active">
+            <span class="node-dot"></span>
+            <span class="node-label">3단계</span>
+          </li>
+        </ol>
+      </nav>
+
+      <section aria-labelledby="stage-3-heading">
+        <h2 id="stage-3-heading">3단계</h2>
+        <p class="stage-summary">
+          격리된 콜드 인스턴스로 실행되는 <code>claude -p</code> 서브에이전트
+          스킬을 추가하고, 공식 문서가 잘못 설명하고 있던 세 가지 사실을
+          바로잡습니다.
+        </p>
+
+        <div class="card-grid">
+          <article class="card">
+            <h3>Claude Subagent Skill</h3>
+
+            <section class="field">
+              <h4>왜</h4>
+              <p>
+                이 저장소는 세 개의 외부 CLI(<code>codex</code>,
+                <code>gemini</code>, <code>agy</code>)에는 위임하고 있었지만
+                Claude Code 자체에는 위임하고 있지 않았습니다.
+                <code>claude -p</code> 서브에이전트는 &quot;다른 관점의
+                의견&quot;을 얻기 위해서가 아니라 격리(isolation)를 위해 둘
+                가치가 있습니다. 대화 기록이 없는 콜드 인스턴스, 범위가 제한된
+                <code>--allowedTools</code>, 독립된 프로세스라는 특성은 병렬
+                서브태스크, 권한이 제한된 편집, Codex/Antigravity로부터의
+                오케스트레이션에 유용합니다.
+              </p>
+              <p>
+                <code>~/.claude/skills/claude-subagent</code>에 예전에 작성된
+                개인용 사본이 있었습니다(2026-05-03 작성, 이 저장소에는 반영된
+                적 없음). 이를 실제 CLI로 검증한 결과 세 가지 핵심적인 부분이
+                잘못되어 있음을 발견했고, 그래서 최신 문서와 실측을 바탕으로
+                다시 작성했으며 기존 사본은 삭제했습니다.
+              </p>
+            </section>
+
+            <section class="field">
+              <h4>무엇을</h4>
+              <ul>
+                <li>
+                  <code>claude-subagent/SKILL.md</code> &mdash; 새 스킬. 기본값:
+                  <code>--model opus</code>, <code>--bare</code> 사용 안 함,
+                  <code>--output-format json</code>, 읽기 전용
+                  <code>--allowedTools "Read,Glob,Grep"</code>.
+                </li>
+                <li>
+                  <code>README.md</code> &mdash; Skills / Defaults /
+                  Requirements / Installation / Quick start / Models / Tested on
+                  항목이 이제 Claude를 다룹니다.
+                </li>
+                <li>
+                  기존 스킬과 공식 문서 둘 다와 모순되는 세 가지 발견 사항이며,
+                  각각 기록하기 전에 재현하여 확인했습니다.
+                  <table>
+                    <thead>
+                      <tr>
+                        <th scope="col">발견 사항</th>
+                        <th scope="col">근거</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td data-label="발견 사항">
+                          <code>--bare</code>는 구독(subscription) 인증에서
+                          사용할 수 없습니다. bare 모드는 OAuth와 키체인 읽기를
+                          완전히 건너뛰는데, 문서는 스크립트용으로 권장하면서도
+                          이는 API 키 인증을 전제로 합니다.
+                        </td>
+                        <td data-label="근거">
+                          <code>claude --bare -p &hellip;</code> &rarr; 종료
+                          코드 1, <code>apiKeySource: "none"</code>,
+                          <code>.result</code> = &quot;Not logged in &middot;
+                          Please run /login&quot;.
+                        </td>
+                      </tr>
+                      <tr>
+                        <td data-label="발견 사항">
+                          <code>--output-format json</code>은 2.1.209 기준으로
+                          문서가 설명하는 단일 객체가 아니라 이벤트의 JSON
+                          <em>배열</em>을 출력합니다. 공식 문서와 기존 스킬이
+                          사용하던 <code>jq -r '.result'</code>는
+                          <code>Cannot index array with string "result"</code>
+                          오류로 실패합니다.
+                        </td>
+                        <td data-label="근거">
+                          깨끗한 환경(<code>env -i</code>)에서도 재현되어,
+                          Claude Code 내부에 중첩되어 실행되기 때문에 발생하는
+                          현상이 아님을 확인했습니다. 해결책:
+                          <code
+                            >jq -r 'if type=="array" then last else . end |
+                            .result'</code
+                          >.
+                        </td>
+                      </tr>
+                      <tr>
+                        <td data-label="발견 사항">
+                          실행이 종료 코드 0을 반환하면서도 실패할 수 있습니다.
+                          <code>.is_error</code>가
+                          <code>subtype: "success"</code>이면서도
+                          <code>true</code>일 수 있고,
+                          <code>--allowedTools</code>에 없는 도구는 조용히
+                          거부됩니다.
+                        </td>
+                        <td data-label="근거">
+                          인증 실패 시 오류 설명이 <code>.result</code>에
+                          담깁니다. 거부된 편집 요청은 파일이 그대로인 채로
+                          &quot;DONE&quot;이라고 답했습니다 &mdash;
+                          <code>.permission_denials</code>만이 유일하게 정직한
+                          신호였습니다.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </li>
+              </ul>
+            </section>
+
+            <section class="field">
+              <h4>어떻게</h4>
+              <p>
+                근거가 먼저, 서술은 그다음: 스킬에 적힌 모든 주장은 문서화되기
+                전에 먼저 실행해 확인했습니다. Doctor Cho가 범위를 정한 핵심
+                테스트 다섯 가지와, 도그푸딩(dogfood) 검증 한 차례를
+                진행했습니다.
+              </p>
+              <ol>
+                <li>
+                  <strong>T1 표준 호출</strong> (<code>--model opus</code>)
+                  &rarr; 종료 코드 0, <code>is_error=false</code>, 사소한
+                  프롬프트에 $0.41(비-bare 실행은 CLAUDE.md, 플러그인, 스킬을
+                  로드하기 때문 &mdash; 그래서 <code>haiku</code>/<code
+                    >sonnet</code
+                  >
+                  관련 가이드가 존재).
+                </li>
+                <li>
+                  <strong>T2 <code>--bare</code></strong> &rarr; 위에서 언급한
+                  인증 실패.
+                </li>
+                <li>
+                  <strong>T3 stdin.</strong> 첫 설계는
+                  <strong>잘못되었습니다</strong>:
+                  <code>sleep 300 | claude &hellip;</code>는 타임아웃되었지만,
+                  <code>timeout</code>이 파이프라인 전체를 감싸고 있어서 실제
+                  124는 Claude가 아니라 <code>sleep</code>에서 나온
+                  것이었습니다. 백그라운드 writer가 열어 둔 FIFO를 사용해
+                  <code>timeout</code>이 Claude만 감싸도록 다시 테스트했습니다.
+                  stdin이 열려 있지만 <strong>비어 있는</strong> 경우는
+                  정상적으로 종료됩니다(10초. <code>codex</code>는 이 경우
+                  멈춘다는 점과 다름). stdin에
+                  <strong>데이터가 들어오지만</strong> EOF가 없는 경우 아무
+                  작업도 시작하기 전에 영원히 블로킹됩니다(0바이트 출력, 60초 뒤
+                  강제 종료). 정상적인 파이프(EOF 있음)는 정상 동작하며 파이프된
+                  텍스트가 모델에 전달됩니다. 따라서 의도적인 파이프를 사용하는
+                  경우를 제외한 모든 호출에는 <code>&lt; /dev/null</code>을
+                  붙여야 한다는 규칙은 stage-1과 결론은 같지만 더 좁은 이유에서
+                  나온 것입니다.
+                </li>
+                <li>
+                  <strong>T4 <code>--allowedTools</code></strong> &rarr; 거부된
+                  편집은 파일을 그대로 두고 <code>permission_denials: 1</code>을
+                  남기며, 허용된 편집은 파일을 실제로 변경합니다. 자식 세션은
+                  <code>permissionMode: default</code>로 실행되며 부모의
+                  <code>auto</code> 설정을 <strong>물려받지 않습니다</strong>.
+                </li>
+                <li>
+                  <strong>T5 <code>--resume</code></strong> &rarr; 결과
+                  이벤트에서 <code>session_id</code>를 캡처했고, 후속 호출은 첫
+                  호출에서 사용한 암호(codeword)를 정확히 기억해내며 같은 id를
+                  재사용했습니다.
+                </li>
+              </ol>
+              <p>
+                <strong>도그푸딩.</strong> 스킬 자체의 표준 호출 방식을 사용해
+                새 <code>claude -p</code> 인스턴스가
+                <code>SKILL.md</code> 자체를 감사(audit)하도록 했습니다. 그 결과
+                실제 결함 다섯 개를 찾아냈습니다 &mdash; 복사해서 바로 쓸 수
+                있어야 할 스니펫에 정의되지 않은 <code>$ERRLOG</code>, 표준
+                스니펫이 이미 <code>rm</code>으로 지운 파일을 읽으려는 resume
+                예제, 문서가 읽으라고 안내하는 오류 로그를 정리 단계가
+                지워버리는 문제, 그리고 가장 심각하게는 표준 블록 자체가 문서가
+                요구하는 세 가지 검사 중 아무것도 수행하지 않고 있던 문제입니다.
+                또한 호출을 <code>| jq</code>로 끝내면 Claude의 종료 코드가 jq의
+                종료 코드로 덮어써져서, <code>timeout</code>에 의한 강제 종료가
+                아무것도 출력하지 않고 종료 코드 0을 반환한다는 것도
+                포착했습니다 &mdash; 조용한 성공과 구분되지 않는 멈춤입니다.
+              </p>
+              <p>
+                <strong>테스트로 잡아낸 자체 버그.</strong> 새로 작성한 블록은
+                fail-closed 기본값으로 <code>.is_error // true</code>를
+                사용했습니다. jq의 <code>//</code>는 <code>null</code>뿐 아니라
+                <code>false</code>도 대체해버리기 때문에, 정상적으로 성공한
+                실행조차 <code>is_error=true</code>로 보고되었습니다.
+                <code>SKILL.md</code>에서 블록을 그대로 추출해 성공 / 인증 실패
+                / 거부 / 타임아웃 네 가지 경로에서 실행해보니 즉시 드러났고,
+                수정은 명시적인 <code>if .is_error == false</code>로 처리하는
+                것이었습니다.
+              </p>
+            </section>
+
+            <section class="field">
+              <h4>리뷰 루프</h4>
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">리뷰어</th>
+                    <th scope="col">결과</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td data-label="리뷰어">
+                      <code>code-reviewer</code> 서브에이전트
+                    </td>
+                    <td data-label="결과">
+                      지적 1건, <strong>수정함</strong>: README quick-start가
+                      같은 diff에서 방금 도입한 규칙을 어기며 여전히 호출을
+                      <code>| jq</code>로 끝내고 있었습니다.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td data-label="리뷰어"><code>codex-subagent</code></td>
+                    <td data-label="결과">
+                      지적 6건. <strong>5건 수정</strong>: README 스니펫에
+                      <code>rc</code>/신호 캡처 누락;
+                      <code>git diff | claude</code>가 실패한
+                      <code>git diff</code>를 삼켜버리는 문제(<code
+                        >set -o pipefail</code
+                      >로 수정); &quot;명시적 요청 시에만 전환한다&quot;고
+                      말하면서도 동시에 조용한 비용 기반 다운그레이드를 허용하던
+                      모델 정책(이제는 제안만 하고 절대 조용히 전환하지 않음);
+                      자기 자신의 항목들과 모순되던 Quick Reference 서두;
+                      README의 오래된 줄 번호. <strong>1건 기각</strong>:
+                      <code>~/.claude/skills/</code>
+                      정리 작업을 여기 기록하는 것이 diff 범위 밖이라는 이의를
+                      제기했으나, 저장소 밖의 로컬 작업이라고 명확히 다시
+                      서술하여 그대로 유지했습니다.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td data-label="리뷰어">
+                      <code>antigravity-subagent</code>
+                    </td>
+                    <td data-label="결과">
+                      <code>NO DEFECTS</code> &mdash; 그러나 네 번째 시도에서
+                      나온 결과입니다. <code>@claude-subagent/SKILL.md</code>
+                      경로 참조 방식으로 실행한 세 차례 시도는 모두 타임아웃
+                      오류로 죽었고, 파일 내용을 프롬프트에 직접 인라인한 뒤에야
+                      성공했습니다. stage-1의 &quot;agy가 파일을 찾아 헤매게
+                      하지 말라&quot;는 주의사항이 다시 한번 확인되었습니다.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p>
+                <strong
+                  >막혀서 보고만 하고 이번 단계에서 고치지 않은 것:</strong
+                >
+                stage 2에서 정한 <code>codex-subagent</code>의 기본값
+                <code>gpt-5.6-sol</code>이 이제는 완전히 거부됩니다(400
+                &quot;not supported when using Codex with a ChatGPT
+                account&quot;, codex-cli 0.144.3). <code>gpt-5.5</code>는 정상
+                동작하며 위의 codex 리뷰도 이 모델로 실행했습니다. stage-2
+                기본값을 고치는 것은 이번 단계의 범위 밖입니다.
+              </p>
+            </section>
+
+            <section class="field">
+              <h4>코드 위치</h4>
+              <ul class="code-list">
+                <li>
+                  <code>claude-subagent/SKILL.md</code> &mdash; 이 스킬 본체.
+                  &quot;Canonical safe invocation&quot; 아래의 표준 블록(3가지
+                  신호 검사, stdin 리다이렉트, <code>timeout -k</code>, 읽은 뒤
+                  정리); &quot;Result contract&quot;에 담긴 함정들;
+                  &quot;Avoiding hangs and silent failures&quot;에 담긴
+                  stdin/timeout/파이프 규칙.
+                </li>
+                <li>
+                  <code>README.md:54</code>(Defaults &rarr; Claude),
+                  <code>:185</code>(Quick start &rarr; Claude),
+                  <code>:257</code>(Models &rarr; Claude), <code>:328</code>
+                  (Tested on).
+                </li>
+                <li>
+                  저장소 밖(로컬 설치, diff에는 포함되지 않음):
+                  <code>~/.claude/skills/claude-subagent/</code>에 있던 오래된
+                  개인용 사본을 삭제하고 이 저장소의
+                  <code>claude-subagent/</code>를 가리키는 심볼릭 링크로
+                  대체하여, 설치된 스킬과 저장소에 추적되는 스킬이 더 이상
+                  어긋날 수 없도록 했습니다.
+                </li>
+              </ul>
+            </section>
+
+            <section class="field">
+              <h4>회고</h4>
+              <p class="retro">
+                핵심 발견 세 가지 중 두 가지는 공식 문서와 모순되며, 둘 다
+                문서를 읽는 것만으로는 발견할 수 없었습니다 &mdash; JSON 배열
+                형태와 종료 코드 0인 실패는 실제로 명령을 실행해 종료 코드를
+                확인해야만 드러납니다. 도그푸딩 검증은 그만한 값어치를 했습니다:
+                &quot;세 가지 신호를 모두 확인하라&quot;고 설파하는 스킬이 정작
+                아무것도 확인하지 않는 표준 스니펫을 배포하고 있었고, 이를
+                잡아낸 것은 외부 독자뿐이었습니다. 되새길 점: 문서에서 다시
+                타이핑한 사본을 테스트하면 문서의 결함이 조용히 고쳐진 채로
+                넘어갈 수 있으니, 문서에서 스니펫을 그대로 추출해 실행해야
+                합니다.
+              </p>
+            </section>
+          </article>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

@@ -51,7 +51,7 @@ These skills pin a single default model per agent and switch only when the user 
 - **Antigravity**: always invoke with `--model "Gemini 3.1 Pro (High)"`. Switch to a Flash, Claude, or GPT-OSS model only when the user explicitly requests it. Run `agy models` to see the exact strings available.
 - **Gemini**: always invoke with `-m pro` (`gemini-3.1-pro-preview`). Switch to `-m flash` only when the user explicitly requests speed/flash.
 - **Codex**: always invoke with model `gpt-5.6-sol` and reasoning effort `high`. Switch only when the user explicitly names a different model or effort (e.g., "use gpt-5.6-luna", "set effort to xhigh"). Always pass the explicit tier id — the bare `gpt-5.6` alias is rejected on ChatGPT-account auth.
-- **Claude**: always invoke with `--model opus` and **without `--bare`**. Bare mode never reads OAuth or the keychain, so on a subscription account it fails with `"Not logged in · Please run /login"` — only use it if `ANTHROPIC_API_KEY` is set. Switch to `sonnet`/`haiku` only when the user asks (or for cheap mechanical work — a trivial `opus` call still costs ~$0.40, since a non-bare run loads CLAUDE.md, plugins, and skills).
+- **Claude**: always invoke with `--model opus` and **without `--bare`**. Bare mode never reads OAuth or the keychain, so on a subscription account it fails with `"Not logged in · Please run /login"` — only use it if `ANTHROPIC_API_KEY` is set. Switch to `sonnet`/`haiku` only when the user explicitly asks. Worth surfacing before a large fan-out: a trivial `opus` call still costs ~$0.40, since a non-bare run loads CLAUDE.md, plugins, and skills.
 
 ## Requirements
 
@@ -192,17 +192,34 @@ ERRLOG=$(mktemp); OUT=$(mktemp)
 timeout -k 10 600 claude -p "Working directory: /path/to/project. Analyze the architecture and suggest improvements." \
   --model opus --allowedTools "Read,Glob,Grep" --output-format json \
   < /dev/null >"$OUT" 2>"$ERRLOG"
+rc=$?
+
+# A run can fail while exiting 0 — gate on all three signals before trusting .result
+LAST=$(jq -c 'if type=="array" then last else . end' "$OUT" 2>/dev/null)
+[ -z "$LAST" ] && LAST='{}'
+IS_ERR=$(printf '%s' "$LAST" | jq -r 'if .is_error == false then "false" else "true" end')
+DENIALS=$(printf '%s' "$LAST" | jq -r '(.permission_denials // []) | length')
+if [ "$rc" -ne 0 ] || [ "$IS_ERR" != false ] || [ "$DENIALS" != 0 ]; then
+  echo "FAILED — exit=$rc is_error=$IS_ERR denials=$DENIALS"; cat "$ERRLOG"
+fi
+printf '%s' "$LAST" | jq -r '.result'
+
+# Follow up in the same session (read the id before deleting $OUT)
+SID=$(printf '%s' "$LAST" | jq -r '.session_id')
+timeout -k 10 600 claude -p "Now focus on the database queries." --resume "$SID" \
+  --output-format json < /dev/null >"$OUT" 2>"$ERRLOG"
 jq -r 'if type=="array" then last else . end | .result' "$OUT"
 
 # Review a diff (a real pipe supplies EOF — omit `< /dev/null`)
-git diff main | claude -p "Review this diff for bugs." --model opus --output-format json 2>"$ERRLOG" \
-  | jq -r 'if type=="array" then last else . end | .result'
-
-# Follow up in the same session
-SID=$(jq -r 'if type=="array" then last else . end | .session_id' "$OUT")
-claude -p "Now focus on the database queries." --resume "$SID" --output-format json < /dev/null 2>"$ERRLOG" \
-  | jq -r 'if type=="array" then last else . end | .result'
+set -o pipefail   # otherwise a failing `git diff` is invisible and Claude just gets empty stdin
+git diff main | timeout -k 10 600 claude -p "Review this diff for bugs." \
+  --model opus --output-format json >"$OUT" 2>"$ERRLOG"
+rc=$?
+jq -r 'if type=="array" then last else . end | .result' "$OUT"
+rm -f "$OUT" "$ERRLOG"
 ```
+
+Never end a `claude -p` call with `| jq`: the pipeline's exit code becomes jq's, so a run killed by `timeout` prints nothing and exits 0 — indistinguishable from a clean run with nothing to say. Redirect to a file, check the exit code, then run `jq` against the file. Full rules in [`claude-subagent/SKILL.md`](./claude-subagent/SKILL.md).
 
 A `claude -p` run can fail while still exiting 0 — check `.is_error` (auth failures land in `.result` as text) and `.permission_denials` (a tool missing from `--allowedTools` is denied silently). See [`claude-subagent/SKILL.md`](./claude-subagent/SKILL.md).
 

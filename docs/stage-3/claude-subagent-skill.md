@@ -39,8 +39,18 @@ Evidence first, prose second: every claim in the skill was run before it was wri
 ## Code locations
 
 - `claude-subagent/SKILL.md` — the skill. Canonical block (three-signal gate, stdin redirect, `timeout -k`, cleanup after reading) under "Canonical safe invocation"; the traps in "Result contract"; the stdin/timeout/pipe rules in "Avoiding hangs and silent failures".
-- `README.md:54` (Defaults → Claude), `:185` (Quick start → Claude), `:240` (Models → Claude), `:311` (Tested on).
-- Removed: `~/.claude/skills/claude-subagent/` (stale private copy), replaced by a symlink to this repo.
+- `README.md:54` (Defaults → Claude), `:185` (Quick start → Claude), `:257` (Models → Claude), `:328` (Tested on).
+- Outside the repo (local install, not in the diff): the stale private copy at `~/.claude/skills/claude-subagent/` was deleted and replaced by a symlink to `claude-subagent/` here, so the installed skill and the tracked one can no longer drift apart.
+
+## Review loop
+
+| Reviewer | Outcome |
+| --- | --- |
+| `code-reviewer` subagent | 1 finding, **fixed**: the README quick-start still ended its calls with `\| jq`, violating the rule the same diff had just introduced (the rule was added late and the README was not re-checked). |
+| `codex-subagent` | 6 findings. **Fixed 5**: README snippet claimed to "check the exit code" but never captured `rc` or the other two signals; `git diff \| claude` swallowed a failing `git diff` (added `set -o pipefail`); the model policy said "switch only on explicit request" while also licensing a silent cost-based downgrade (now: *propose*, never switch silently); the Quick Reference preamble contradicted two of its own rows; stale README line numbers in this doc. **Dismissed 1**: it objected to recording the `~/.claude/skills/` cleanup here because that path is outside the diff. Stage docs are a log of what was done, not a description of the diff, so the entry stays — reworded to say plainly that it is a local action outside the repo. |
+| `antigravity-subagent` | `NO DEFECTS` — but only on the fourth attempt. Three `@claude-subagent/SKILL.md` runs died with `Error: timeout waiting for response` (including at `--print-timeout 15m`), while a trivial `-p` probe answered instantly. Inlining the file's *content* into the prompt worked immediately. This re-confirms the stage-1 caveat already in `antigravity-subagent/SKILL.md`: don't make `agy` hunt for files. |
+
+**Blocked, reported, not fixed here:** the `codex-subagent` default from stage 2, `gpt-5.6-sol`, is now rejected outright — `400 … "The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account"` (codex-cli 0.144.3, and it is also the default in `~/.codex/config.toml`). `gpt-5.5` works. The codex review above was run on `gpt-5.5`. Fixing the stage-2 default is out of scope for this stage and needs its own decision.
 
 ## Retrospective
 

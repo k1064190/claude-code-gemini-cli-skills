@@ -257,6 +257,10 @@
             <span class="node-dot"></span>
             <span class="node-label">2단계</span>
           </li>
+          <li class="timeline-node">
+            <span class="node-dot future"></span>
+            <span class="node-label">3단계</span>
+          </li>
         </ol>
       </nav>
 
@@ -335,6 +339,38 @@
                 아니라 즉시 명확한 400 오류로 나타나, stage-1 작업이 유효함을
                 검증해 주었습니다.
               </p>
+            </section>
+
+            <section class="field">
+              <h4>리뷰 루프</h4>
+              <p>
+                로컬 리뷰어 세 곳 모두 이 diff를 검토했고 모두 문제없이
+                통과했습니다: <code>code-reviewer-pro</code>(이슈 0건),
+                <code>codex</code>(차단 이슈 없음 &mdash; 리뷰 자체가 새로운
+                <code>gpt-5.6-sol</code> 기본값으로 실행됨),
+                <code>agy</code>(차단 이슈 없음).
+              </p>
+              <p>
+                Codex GitHub 봇은 병합 이후(PR #4) P2 두 건을 남겼고, 후속
+                PR에서 해결했습니다.
+              </p>
+              <ul>
+                <li>
+                  <strong>확인됨:</strong> <code>README.md</code>가 네 곳에서
+                  여전히 <code>gpt-5.5</code>를 기본값으로 문서화하고 있었음
+                  &mdash; 수정했고, 여전히 어긋나 있던 quick-start 예제도
+                  stage-1의 안전한 패턴(<code>&lt; /dev/null</code>,
+                  <code>$ERRLOG</code>)에 맞춰 정렬했습니다.
+                </li>
+                <li>
+                  <strong>근거를 들어 기각:</strong> effort
+                  <code>ultra</code>/<code>max</code>가 존재한다는 주장 &mdash;
+                  공식 설정 레퍼런스에는
+                  <code>minimal | low | medium | high | xhigh</code>만 나와
+                  있습니다. 검증 과정에서 실제 누락 사항도 발견했습니다: 목록에
+                  <code>minimal</code>이 빠져 있어 추가했습니다.
+                </li>
+              </ul>
             </section>
 
             <section class="field">

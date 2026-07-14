@@ -9,7 +9,7 @@ Spawns a fresh Claude Code CLI run via `claude -p`. The subagent has **no knowle
 
 ## Running a Task
 
-1. **Default: model `opus`, no `--bare`, `--output-format json`, read-only tools.** Use these for every task unless the user explicitly asks otherwise (e.g., "use sonnet", "let it edit files"). Model aliases: `opus`, `sonnet`, `haiku`, `fable`; full ids also work (`claude-opus-4-8`, `claude-sonnet-5`, `claude-haiku-4-5`). Drop to `haiku`/`sonnet` for mechanical work — a *trivial* `opus` prompt still measured **$0.41**, because a non-bare run loads CLAUDE.md, plugins, and skills.
+1. **Default: model `opus`, no `--bare`, `--output-format json`, read-only tools.** Use these for every task and switch **only when the user explicitly asks** (e.g., "use sonnet", "let it edit files"). Model aliases: `opus`, `sonnet`, `haiku`, `fable`; full ids also work (`claude-opus-4-8`, `claude-sonnet-5`, `claude-haiku-4-5`). Cost is worth surfacing before a big fan-out — a *trivial* `opus` prompt measured **$0.41**, because a non-bare run loads CLAUDE.md, plugins, and skills — so for bulk or mechanical work, *propose* `sonnet`/`haiku` and let the user decide. Never downgrade silently.
 2. **Never pass `--bare` unless `ANTHROPIC_API_KEY` is set.** Bare mode skips OAuth and keychain reads entirely, so on a subscription (OAuth) machine it fails with `apiKeySource: "none"` and the result string `"Not logged in · Please run /login"` (exit 1). The official docs recommend `--bare` for scripts; that advice only applies to API-key auth. Verified on Claude Code 2.1.209.
 3. **Scope the tools.** `--allowedTools` auto-approves; anything not listed is denied without a prompt and the task silently does not happen (see [Result contract](#result-contract)). Use `--tools` to restrict which tools exist at all. Start read-only: `--allowedTools "Read,Glob,Grep"`. Ask the user before granting `Edit`, `Write`, or `Bash`.
 4. **Working directory is the shell's cwd** — there is no `-C` flag. `cd` into the target directory, or use `--add-dir <path>`, and state the absolute path in the prompt.
@@ -65,18 +65,19 @@ Other useful fields on the last event: `.session_id`, `.total_cost_usd`, `.num_t
 1. **Redirect stdin: `< /dev/null`.** `claude -p` reads stdin and waits for **EOF** when stdin carries data. A writer that sends bytes and never closes blocks the run **forever, before any work happens** — verified: 0 bytes of output, killed by `timeout` at 60 s. (An *empty* open stdin does exit cleanly, but don't rely on the distinction.) The only time you omit the redirect is when you are *deliberately* piping context in — a real pipe supplies EOF and is safe:
    ```bash
    ERRLOG=$(mktemp); OUT=$(mktemp)
+   set -o pipefail   # without it, a failing `git diff` is invisible and Claude just gets empty stdin
    git diff main | timeout -k 10 600 claude -p "Review this diff for bugs." \
      --model opus --output-format json >"$OUT" 2>"$ERRLOG"
-   rc=$?   # claude's own status — reachable only because stdout went to a file, not into a pipe
+   rc=$?   # the pipeline's status — with pipefail, non-zero if either git diff or claude failed
    ```
-   Then apply the same three checks as the canonical block. Piped stdin is capped at 10 MB; for larger inputs, write a file and name its path in the prompt.
+   Claude's stdout still goes to a file, not into a pipe, so `rc` is meaningful. Then apply the same three checks as the canonical block. Piped stdin is capped at 10 MB; for larger inputs, write a file and name its path in the prompt.
 2. **Wrap every call in `timeout -k`.** `timeout -k 10 600` sends SIGTERM at 10 min and SIGKILL 10 s later, so the call **cannot** hang indefinitely. Treat exit `124`/`137` as "timed out" and report it — do not silently retry. Raise the cap for large tasks; don't remove it.
 3. **Keep stderr, surface it on failure.** Capture with `2>"$ERRLOG"` (`ERRLOG=$(mktemp)` first) instead of `2>/dev/null`, and read it **before** any `rm`. On a clean run the log is empty; on a non-zero exit or empty stdout, `cat "$ERRLOG"` is where the real cause (auth, rate limit, network) shows up.
 4. **Never end a `claude -p` call with `| jq`.** The pipeline's exit code becomes jq's: a run killed by `timeout` feeds jq empty input, jq prints nothing and exits 0, and the caller cannot tell a timeout from a successful run with nothing to say. Redirect to a file, capture `rc`, then run `jq` against the file.
 
 ## Quick Reference
 
-Every row assumes `< /dev/null 2>"$ERRLOG"` and a `timeout -k` wrapper, and that the result is read with `jq -r 'if type=="array" then last else . end | .result'`.
+Unless a row says otherwise, assume the canonical block: `< /dev/null`, stdout to `$OUT`, stderr to `$ERRLOG`, a `timeout -k` wrapper, `rc=$?`, and the three-signal gate. The diff row deliberately supplies stdin, and the structured-output row reads `.structured_output` instead of `.result`.
 
 | Use case | Key flags |
 | --- | --- |

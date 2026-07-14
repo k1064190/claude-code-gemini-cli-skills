@@ -257,6 +257,10 @@
             <span class="node-dot"></span>
             <span class="node-label">Stage 2</span>
           </li>
+          <li class="timeline-node">
+            <span class="node-dot future"></span>
+            <span class="node-label">Stage 3</span>
+          </li>
         </ol>
       </nav>
 
@@ -331,6 +335,38 @@
                 &mdash; the alias failure surfaced instantly as a clean 400
                 instead of a silent freeze, validating the stage-1 work.
               </p>
+            </section>
+
+            <section class="field">
+              <h4>Review loop</h4>
+              <p>
+                All three local reviewers ran on the diff and returned clean:
+                <code>code-reviewer-pro</code> (0 issues), <code>codex</code>
+                (no blocking issues &mdash; the review itself ran on the new
+                <code>gpt-5.6-sol</code> default), and <code>agy</code> (no
+                blocking issues).
+              </p>
+              <p>
+                The Codex GitHub bot replied post-merge (PR #4) with two P2s,
+                resolved in a follow-up PR:
+              </p>
+              <ul>
+                <li>
+                  <strong>Confirmed:</strong> <code>README.md</code> still
+                  documented <code>gpt-5.5</code> as the default in four places
+                  &mdash; fixed, and the quick-start example was also brought in
+                  line with the stage-1 safe pattern (<code>&lt; /dev/null</code
+                  >, <code>$ERRLOG</code>) it still contradicted.
+                </li>
+                <li>
+                  <strong>Dismissed with evidence:</strong> a claim that efforts
+                  <code>ultra</code>/<code>max</code> exist &mdash; the official
+                  config reference lists only
+                  <code>minimal | low | medium | high | xhigh</code>.
+                  Verification did surface a real gap: the list was missing
+                  <code>minimal</code>, which was added.
+                </li>
+              </ul>
             </section>
 
             <section class="field">
