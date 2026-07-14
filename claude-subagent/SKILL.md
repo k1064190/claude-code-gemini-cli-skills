@@ -1,0 +1,138 @@
+---
+name: claude-subagent
+description: Use when the user asks to run Claude Code CLI non-interactively (claude -p, "spawn a claude instance", "delegate to claude", "use a fresh claude context") or when an isolated Claude Code run is needed for parallel work, scoped tool permissions, or a clean-context second pass. Also use when a Codex or Gemini/Antigravity orchestrator needs Claude's capabilities for a subtask — this skill has the exact command patterns.
+---
+
+# Claude Subagent Skill Guide
+
+Spawns a fresh Claude Code CLI run via `claude -p`. The subagent has **no knowledge of the current conversation** — the prompt is the only context it gets.
+
+## Running a Task
+
+1. **Default: model `opus`, no `--bare`, `--output-format json`, read-only tools.** Use these for every task unless the user explicitly asks otherwise (e.g., "use sonnet", "let it edit files"). Model aliases: `opus`, `sonnet`, `haiku`, `fable`; full ids also work (`claude-opus-4-8`, `claude-sonnet-5`, `claude-haiku-4-5`). Drop to `haiku`/`sonnet` for mechanical work — a *trivial* `opus` prompt still measured **$0.41**, because a non-bare run loads CLAUDE.md, plugins, and skills.
+2. **Never pass `--bare` unless `ANTHROPIC_API_KEY` is set.** Bare mode skips OAuth and keychain reads entirely, so on a subscription (OAuth) machine it fails with `apiKeySource: "none"` and the result string `"Not logged in · Please run /login"` (exit 1). The official docs recommend `--bare` for scripts; that advice only applies to API-key auth. Verified on Claude Code 2.1.209.
+3. **Scope the tools.** `--allowedTools` auto-approves; anything not listed is denied without a prompt and the task silently does not happen (see [Result contract](#result-contract)). Use `--tools` to restrict which tools exist at all. Start read-only: `--allowedTools "Read,Glob,Grep"`. Ask the user before granting `Edit`, `Write`, or `Bash`.
+4. **Working directory is the shell's cwd** — there is no `-C` flag. `cd` into the target directory, or use `--add-dir <path>`, and state the absolute path in the prompt.
+5. Run the command under a wall-clock `timeout`, with stdin redirected and stderr captured (see [Avoiding hangs](#avoiding-hangs-and-silent-failures)), then check all three failure signals before trusting the output.
+6. **After the run completes**, tell the user the session can be resumed: report the `session_id` and offer a follow-up via `--resume`.
+
+### Canonical safe invocation
+
+Capture stdout to a file (never pipe straight into `jq` — that replaces `claude`'s exit code with `jq`'s, and a killed run then looks like a clean empty success), then gate on all three failure signals before printing anything as an answer.
+
+```bash
+ERRLOG=$(mktemp); OUT=$(mktemp)
+timeout -k 10 600 claude -p "your prompt here" \
+  --model opus \
+  --allowedTools "Read,Glob,Grep" \
+  --output-format json \
+  < /dev/null >"$OUT" 2>"$ERRLOG"
+rc=$?   # not `status`: that name is read-only in fish/zsh
+
+LAST=$(jq -c 'if type=="array" then last else . end' "$OUT" 2>/dev/null)
+[ -z "$LAST" ] && LAST='{}'   # timed-out runs leave $OUT empty or truncated
+# `.is_error // true` would be WRONG: jq's `//` also replaces `false`, so a clean run reads as an error.
+IS_ERR=$(printf '%s' "$LAST" | jq -r 'if .is_error == false then "false" else "true" end')
+DENIALS=$(printf '%s' "$LAST" | jq -r '(.permission_denials // []) | length')
+SID=$(printf '%s' "$LAST" | jq -r '.session_id // empty')   # keep for --resume
+
+if [ "$rc" -ne 0 ] || [ "$IS_ERR" != false ] || [ "$DENIALS" != 0 ]; then
+  echo "claude subagent FAILED — exit=$rc is_error=$IS_ERR denials=$DENIALS"
+  printf '%s' "$LAST" | jq -r '.result // "(no result)"'   # error text, not an answer
+  cat "$ERRLOG"
+else
+  printf '%s' "$LAST" | jq -r '.result'
+fi
+rm -f "$OUT" "$ERRLOG"   # only after reading them — the error log is the diagnosis
+```
+
+## Result contract
+
+`--output-format json` on 2.1.209 prints a **JSON array** of events (`system/init`, `assistant`, …, `result`), not the single object the docs describe. `jq -r '.result'` — the form used by the official docs — fails with `Cannot index array with string "result"`. Extract the last element instead: `jq -r 'if type=="array" then last else . end | .result'` handles both shapes.
+
+A run only succeeded if **all three** of these hold. Checking only one lets a failure pass as an answer:
+
+| Signal | Failure looks like |
+| --- | --- |
+| `rc` (exit code) | Non-zero. `124` = the `timeout` fired, `137` = `-k` had to SIGKILL it. |
+| `.is_error` on the last event | `true` while `subtype` still says `"success"` — and `.result` holds the *error text*, e.g. `"Not logged in · Please run /login"`. A naive reader prints that as if it were the answer. |
+| `.permission_denials \| length` | Non-zero while `is_error` is `false` and `rc` is `0`. The tool was not in `--allowedTools`, so it was denied without a prompt and the work never happened. `.result` may ask for permission — or **claim success anyway**: an observed run answered `"DONE"` with the target file untouched. This field is the only honest signal. |
+
+Other useful fields on the last event: `.session_id`, `.total_cost_usd`, `.num_turns`, and `.structured_output` (with `--json-schema`).
+
+## Avoiding hangs and silent failures
+
+1. **Redirect stdin: `< /dev/null`.** `claude -p` reads stdin and waits for **EOF** when stdin carries data. A writer that sends bytes and never closes blocks the run **forever, before any work happens** — verified: 0 bytes of output, killed by `timeout` at 60 s. (An *empty* open stdin does exit cleanly, but don't rely on the distinction.) The only time you omit the redirect is when you are *deliberately* piping context in — a real pipe supplies EOF and is safe:
+   ```bash
+   ERRLOG=$(mktemp); OUT=$(mktemp)
+   git diff main | timeout -k 10 600 claude -p "Review this diff for bugs." \
+     --model opus --output-format json >"$OUT" 2>"$ERRLOG"
+   rc=$?   # claude's own status — reachable only because stdout went to a file, not into a pipe
+   ```
+   Then apply the same three checks as the canonical block. Piped stdin is capped at 10 MB; for larger inputs, write a file and name its path in the prompt.
+2. **Wrap every call in `timeout -k`.** `timeout -k 10 600` sends SIGTERM at 10 min and SIGKILL 10 s later, so the call **cannot** hang indefinitely. Treat exit `124`/`137` as "timed out" and report it — do not silently retry. Raise the cap for large tasks; don't remove it.
+3. **Keep stderr, surface it on failure.** Capture with `2>"$ERRLOG"` (`ERRLOG=$(mktemp)` first) instead of `2>/dev/null`, and read it **before** any `rm`. On a clean run the log is empty; on a non-zero exit or empty stdout, `cat "$ERRLOG"` is where the real cause (auth, rate limit, network) shows up.
+4. **Never end a `claude -p` call with `| jq`.** The pipeline's exit code becomes jq's: a run killed by `timeout` feeds jq empty input, jq prints nothing and exits 0, and the caller cannot tell a timeout from a successful run with nothing to say. Redirect to a file, capture `rc`, then run `jq` against the file.
+
+## Quick Reference
+
+Every row assumes `< /dev/null 2>"$ERRLOG"` and a `timeout -k` wrapper, and that the result is read with `jq -r 'if type=="array" then last else . end | .result'`.
+
+| Use case | Key flags |
+| --- | --- |
+| Read-only analysis (default) | `--model opus --allowedTools "Read,Glob,Grep"` |
+| Apply local edits | `--allowedTools "Read,Edit,Write,Glob,Grep"` (ask the user first) |
+| Code + shell | `--allowedTools "Read,Edit,Bash"` (ask the user first) |
+| Scoped shell only | `--allowedTools "Bash(git log *),Bash(git diff *),Read"` |
+| Cheap mechanical task | `--model haiku` |
+| Review a diff | `git diff main \| claude -p "review this diff" …` (real pipe: omit `< /dev/null`) |
+| Structured result | `--json-schema '{…}'`, then read `.structured_output` |
+| Cap the blast radius | `--max-turns 10`, `--max-budget-usd 1.00` |
+| Custom role | `--append-system-prompt "You are a security engineer."` |
+| Another directory | `--add-dir /abs/path` (there is no `-C`) |
+
+## Session continuity
+
+`$SID` comes from the canonical block above — read it out of `$OUT` **before** the `rm`, or the id is gone. An empty `$SID` does not fail loudly; `--resume ""` errors with `--resume requires a valid session ID`.
+
+```bash
+ERRLOG=$(mktemp); OUT=$(mktemp)
+timeout -k 10 600 claude -p "follow-up question" --resume "$SID" \
+  --output-format json < /dev/null >"$OUT" 2>"$ERRLOG"
+rc=$?
+jq -r 'if type=="array" then last else . end | .result' "$OUT"   # plus the same three checks
+rm -f "$OUT" "$ERRLOG"
+```
+
+`--resume "$SID"` reuses the same session id and remembers the earlier turns (verified: the subagent recalled a codeword set in the first call). Run the follow-up **from the same directory** as the original — session lookup is scoped to the project directory and its git worktrees. `--continue` picks the most recent session in the cwd without capturing an id; `--fork-session` branches instead of appending.
+
+## Parallel execution
+
+Send multiple Bash tool calls in a single response; each `claude -p` runs independently. Right for independent subtasks — no shared files being edited, no ordering dependency. Give each its own `$OUT`/`$ERRLOG`.
+
+## Writing effective subagent prompts
+
+The subagent starts cold. Brief it like someone who just walked in:
+
+```
+Working directory: {abs_path}
+Task: {what to produce}
+Output: {where to save / how to return}
+Constraints: {language, format, scope limits}
+```
+
+## Critical evaluation of the subagent's output
+
+A Claude subagent is the **same model family you are** — it shares your blind spots, so agreement is weak evidence. Do not treat "the subagent agreed" as confirmation.
+
+- Use it for **isolation** (clean context, scoped permissions, parallel work), not for a second opinion.
+- For a genuine cross-model check, use the `codex-subagent` or `antigravity-subagent` skills instead.
+- Verify claims about recent APIs, versions, or model names — the subagent has the same knowledge cutoff you do.
+
+## Error Handling
+
+- Stop and report whenever `claude --version` fails, `rc` is non-zero, `is_error` is `true`, or `permission_denials` is non-empty. `cat "$ERRLOG"` first — the cause is usually there, not in stdout.
+- **Auth**: `"Not logged in · Please run /login"` means the run had no usable credentials. Check `claude auth status`; ask the user to run `! claude auth login` (it is interactive). If it only happens with `--bare`, drop `--bare` — that is the expected behavior on OAuth auth.
+- **Exit 124/137**: the `timeout` killed the run. Report it as a timeout; consider a larger cap, a cheaper model, or `--max-turns`. Do not retry blindly.
+- **Empty stdout, no error**: the run was killed while blocked on stdin. Confirm `< /dev/null` was present.
+- Before using `--allowedTools` entries that write or execute (`Edit`, `Write`, `Bash`) or `--permission-mode` values that bypass prompts (`acceptEdits`, `bypassPermissions`), ask the user with `AskUserQuestion` unless permission was already given.
