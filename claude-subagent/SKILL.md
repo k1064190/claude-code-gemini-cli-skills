@@ -13,11 +13,15 @@ Spawns a fresh Claude Code CLI run via `claude -p`. The subagent has **no knowle
 2. **Never pass `--bare` on OAuth (subscription) auth.** Bare mode skips OAuth and keychain reads entirely, so it fails with `apiKeySource: "none"` and the result string `"Not logged in · Please run /login"` (exit 1). Verified on Claude Code 2.1.209. `--bare` is safe *only* when the run has a non-OAuth credential source: `ANTHROPIC_API_KEY`, an `apiKeyHelper` supplied via `--settings`, or Bedrock / Google Cloud / Microsoft Foundry provider credentials. The official docs recommend `--bare` for scripts — that advice silently assumes one of those.
 3. **`--tools` is the boundary; `--allowedTools` is only a prompt-suppressor.** `--allowedTools` auto-approves what it lists — it does **not** remove anything else. An unlisted tool falls through to the ambient permission mode, and if the machine's settings make that mode permissive (`permissions.defaultMode` of `acceptEdits`, `auto`, or `bypassPermissions`), the subagent is handed the full tool set and its writes are **approved, not denied** — nothing lands in `.permission_denials`, so the gate reports a clean success. Verified against a settings file with `defaultMode: bypassPermissions`: a "read-only" call carrying `--allowedTools "Read,Glob,Grep"` was offered **32 tools, edited the target file, and reported `permission_denials: 0`**. The same call with the flags below ran at `permissionMode: dontAsk` with exactly three tools and left the file untouched.
 
-   A sandbox therefore needs **two** layers, and neither substitutes for the other:
+   Bounding a run takes **four** flags, and none substitutes for another:
    - `--tools "Read,Glob,Grep"` — bounds which built-in tools exist at all.
    - `--permission-mode dontAsk` — pins the ambient mode, so an unlisted call is denied instead of inheriting whatever the machine's settings allow. Without it, a run with `Bash` in `--tools` but only `Bash(git log *)` in `--allowedTools` **executed `touch pwned.txt`** under a permissive mode (`permission_denials: 0`); with it, the same call was denied (`permission_denials: 1`, no file).
+   - `--setting-sources user` — drops the *project's* settings. `claude -p` skips the workspace-trust dialog, so a repo's own `.claude/settings.json` is loaded and trusted, and **its hooks run shell commands outside the tool boundary entirely** — permission mode never sees them. Verified: a repo with a `PreToolUse` hook on `Read` executed that hook during a "read-only" run with all the flags above; adding `--setting-sources user` stopped it.
+   - `--strict-mcp-config` — drops the project's MCP servers (verified: `mcp_servers` goes 1 → 0). `--tools` governs the built-in set; the docs note MCP tools are not covered by it.
 
-   Add `--strict-mcp-config` to drop the project's MCP servers too (verified: `mcp_servers` goes 1 → 0) — `--tools` governs the built-in set, and the docs note MCP tools are not covered by it. Ask the user before widening to `Edit`, `Write`, or `Bash`, and widen `--tools` and `--allowedTools` together.
+   Ask the user before widening to `Edit`, `Write`, or `Bash`, and widen `--tools` and `--allowedTools` together.
+
+   **What this still does not bound: file reach.** `Read`/`Glob`/`Grep` are not path-scoped — a "read-only" subagent can read anything you can, including `~/.ssh` and `~/.aws`. Verified: it read `/etc/hostname` with `permission_denials: 0`. If the repo or the prompt is untrusted, scope the rule: `--allowedTools "Read(./**),Glob,Grep"` denied that same read (`permission_denials: 1`).
 4. **Working directory is the shell's cwd** — there is no `-C` flag. `cd` into the target directory, or use `--add-dir <path>`, and state the absolute path in the prompt.
 5. Run the command under a wall-clock `timeout`, with stdin redirected and stderr captured (see [Avoiding hangs](#avoiding-hangs-and-silent-failures)), then check all three failure signals before trusting the output.
 6. **After the run completes**, tell the user the session can be resumed: report the `session_id` and offer a follow-up via `--resume`.
@@ -33,6 +37,7 @@ timeout -k 10 600 claude -p "your prompt here" \
   --tools "Read,Glob,Grep" \
   --allowedTools "Read,Glob,Grep" \
   --permission-mode dontAsk \
+  --setting-sources user \
   --strict-mcp-config \
   --output-format json \
   < /dev/null >"$OUT" 2>"$ERRLOG"
@@ -94,14 +99,15 @@ Other useful fields on the last event: `.session_id`, `.total_cost_usd`, `.num_t
 
 Unless a row says otherwise, assume the canonical block: `< /dev/null`, stdout to `$OUT`, stderr to `$ERRLOG`, a `timeout -k` wrapper, `rc=$?`, and the three-signal gate. The diff row deliberately supplies stdin, and the structured-output row reads `.structured_output` instead of `.result`.
 
-Every row also carries `--permission-mode dontAsk` — without it the rows below are suggestions, not limits (see step 3). `--tools` bounds what exists; `--allowedTools` suppresses the prompts for what you intend.
+`--tools` bounds what exists; `--allowedTools` suppresses the prompts for what you intend; `--permission-mode dontAsk --setting-sources user --strict-mcp-config` (in every row below, spelled out) is what makes those limits real rather than advisory.
 
 | Use case | Key flags |
 | --- | --- |
-| Read-only analysis (default) | `--model opus --tools "Read,Glob,Grep" --allowedTools "Read,Glob,Grep" --strict-mcp-config` |
-| Apply local edits | `--tools "Read,Edit,Write,Glob,Grep" --allowedTools "Read,Edit,Write,Glob,Grep"` (ask the user first) |
-| Code + shell | `--tools "Read,Edit,Bash" --allowedTools "Read,Edit,Bash"` (ask the user first) |
-| Scoped shell only | `--tools "Read,Bash" --allowedTools "Bash(git log *),Bash(git diff *),Read"` — `--tools` keeps `Bash` in reach, `--allowedTools` narrows it to those commands, `dontAsk` denies the rest |
+| Read-only analysis (default) | `--model opus --tools "Read,Glob,Grep" --allowedTools "Read,Glob,Grep" --permission-mode dontAsk --setting-sources user --strict-mcp-config` |
+| Read-only, untrusted repo | as above, but `--allowedTools "Read(./**),Glob,Grep"` — denies reads outside the working directory |
+| Apply local edits | `--tools "Read,Edit,Write,Glob,Grep" --allowedTools "Read,Edit,Write,Glob,Grep" --permission-mode dontAsk --setting-sources user` (ask the user first) |
+| Code + shell | `--tools "Read,Edit,Bash" --allowedTools "Read,Edit,Bash" --permission-mode dontAsk --setting-sources user` (ask the user first) |
+| Scoped shell only | `--tools "Read,Bash" --allowedTools "Bash(git log *),Bash(git diff *),Read" --permission-mode dontAsk --setting-sources user` — `--tools` keeps `Bash` in reach, `--allowedTools` narrows it to those commands, `dontAsk` denies the rest |
 | Cheap mechanical task | `--model haiku` |
 | Review a diff | `git diff main \| claude -p "review this diff" …` (real pipe: omit `< /dev/null`) |
 | Structured result | `--json-schema '{…}'`, then read `.structured_output` |

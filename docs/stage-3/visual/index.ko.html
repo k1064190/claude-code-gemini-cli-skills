@@ -190,6 +190,13 @@
         color: var(--accent);
       }
 
+      .field h5 {
+        margin: 1.25rem 0 0.5rem;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text);
+      }
+
       .field p,
       .field ul,
       .field ol {
@@ -433,6 +440,32 @@
                           신호였습니다.
                         </td>
                       </tr>
+                      <tr>
+                        <td data-label="발견 사항">
+                          <code>--allowedTools</code>는 샌드박스가 아닙니다.
+                          이는 프롬프트를 억제할 뿐 도구 자체를 제거하지
+                          않습니다. 목록에 없는 도구는 주변(ambient) 권한 모드로
+                          그대로 전달되며, 프로젝트 자체의 settings/hooks는 도구
+                          경계 밖에서 완전히 실행됩니다.
+                        </td>
+                        <td data-label="근거">
+                          <code>.claude/settings.json</code>에서
+                          <code>defaultMode: bypassPermissions</code>로 설정된
+                          저장소를 대상으로,
+                          <code>--allowedTools "Read,Glob,Grep"</code>를 지정한
+                          &quot;읽기 전용&quot; 호출이
+                          <strong
+                            >32개의 도구를 제공받았고, 파일을 편집했으며,
+                            <code>permission_denials: 0</code>으로 보고</strong
+                          >했습니다. 해당 저장소의 <code>PreToolUse</code> 훅은
+                          실행 중 <strong>셸 명령을 실행</strong>했습니다. 이
+                          경계를 보장하려면 <code>--tools</code>,
+                          <code>--permission-mode dontAsk</code>,
+                          <code>--setting-sources user</code>,
+                          <code>--strict-mcp-config</code> 네 가지 플래그가 모두
+                          필요합니다.
+                        </td>
+                      </tr>
                     </tbody>
                   </table>
                 </li>
@@ -576,16 +609,63 @@
                   </tr>
                 </tbody>
               </table>
+
+              <h5>Codex GitHub 봇 (PR #6)</h5>
+              <ul>
+                <li>
+                  <strong>1차 &mdash; 9건, 모두 유효, 모두 수정.</strong> 하나의
+                  패턴이 지배적이었습니다: 스니펫들이 실패를 감지하고도
+                  <code>.result</code>를 그대로 출력한 뒤 종료 코드 0으로
+                  끝나서, 오케스트레이터가 종료 상태로 분기할 수 없었습니다.
+                  이제는 세 가지 신호 중 하나라도 해당되면 stderr에 진단 내용을
+                  출력하고 <code>exit 1</code>합니다. 그 외:
+                  <code>--tools</code> 사용법 수정(내장 도구 전용; MCP는
+                  <code>--disallowedTools "mcp__*"</code> /
+                  <code>--strict-mcp-config</code> 필요),
+                  <code>--bare</code> 전제 조건을
+                  <code>ANTHROPIC_API_KEY</code>를 넘어 문서화된 다른 비-OAuth
+                  소스까지 확장, 그리고 모델 정책이 더 이상 조용한 비용 기반
+                  다운그레이드를 허용하지 않도록 수정.
+                </li>
+                <li>
+                  <strong
+                    >2차 &mdash; 3건, 그중 P2가 이번 단계에서 가장 값진 리뷰
+                    코멘트였습니다.</strong
+                  >
+                  읽기 전용 기본값이 실제로는 읽기 전용이 아니라는
+                  지적이었습니다. 재현해보니 주장보다 상황이 더 나빴고(위 표
+                  참고), 그 수정이 바로 4개 플래그로 이루어진 경계입니다.
+                </li>
+                <li>
+                  <strong>3차 &mdash; 실행되지 않음.</strong> 봇은 &quot;You
+                  have reached your Codex usage limits for code
+                  reviews.&quot;라고 응답했습니다. 따라서 2차의 권한 모델 변경은
+                  Codex의 승인을 받지 못했으며, 대신 로컬에서
+                  리뷰했습니다(<code>code-reviewer</code>는 Quick Reference
+                  항목들에서 <code>--permission-mode dontAsk</code>가 빠졌음을
+                  발견했고, <code>agy</code>는
+                  <code>--setting-sources user</code>가 차단하는 프로젝트 훅
+                  우회 경로를 발견했습니다. &quot;잘린 <code>$OUT</code>에서
+                  jq가 crash한다&quot;는 지적은 <strong>기각</strong>되었습니다
+                  &mdash; <code>[ -z "$LAST" ] && LAST='{}'</code> 가드가 이미
+                  이를 처리한다는 것이 타임아웃 테스트에서 확인되었습니다).
+                </li>
+              </ul>
+
               <p>
                 <strong
                   >막혀서 보고만 하고 이번 단계에서 고치지 않은 것:</strong
                 >
                 stage 2에서 정한 <code>codex-subagent</code>의 기본값
-                <code>gpt-5.6-sol</code>이 이제는 완전히 거부됩니다(400
-                &quot;not supported when using Codex with a ChatGPT
-                account&quot;, codex-cli 0.144.3). <code>gpt-5.5</code>는 정상
-                동작하며 위의 codex 리뷰도 이 모델로 실행했습니다. stage-2
-                기본값을 고치는 것은 이번 단계의 범위 밖입니다.
+                <code>gpt-5.6-sol</code>이 이제는 완전히 거부됩니다 &mdash;
+                <code
+                  >400 &hellip; "The 'gpt-5.6-sol' model is not supported when
+                  using Codex with a ChatGPT account"</code
+                >
+                (codex-cli 0.144.3이며, <code>~/.codex/config.toml</code>의
+                기본값이기도 합니다). <code>gpt-5.5</code>는 정상 동작하며 위의
+                로컬 codex 리뷰도 이 모델로 실행했습니다. stage-2 기본값을
+                고치는 것은 이번 단계의 범위 밖이며 별도의 결정이 필요합니다.
               </p>
             </section>
 
@@ -620,16 +700,30 @@
             <section class="field">
               <h4>회고</h4>
               <p class="retro">
-                핵심 발견 세 가지 중 두 가지는 공식 문서와 모순되며, 둘 다
+                핵심 발견 사항 대부분은 공식 문서와 모순되며, 그중 어느 것도
                 문서를 읽는 것만으로는 발견할 수 없었습니다 &mdash; JSON 배열
-                형태와 종료 코드 0인 실패는 실제로 명령을 실행해 종료 코드를
-                확인해야만 드러납니다. 도그푸딩 검증은 그만한 값어치를 했습니다:
-                &quot;세 가지 신호를 모두 확인하라&quot;고 설파하는 스킬이 정작
-                아무것도 확인하지 않는 표준 스니펫을 배포하고 있었고, 이를
-                잡아낸 것은 외부 독자뿐이었습니다. 되새길 점: 문서에서 다시
-                타이핑한 사본을 테스트하면 문서의 결함이 조용히 고쳐진 채로
-                넘어갈 수 있으니, 문서에서 스니펫을 그대로 추출해 실행해야
-                합니다.
+                형태, 종료 코드 0인 실패, 그리고 권한 모델 문제는 모두 실제로
+                명령을 실행해 결과를 확인해야만 드러났습니다. 각 리뷰 레이어는
+                서로 다른 종류의 문제를 잡아냈고, 매번 다른 레이어가 놓친 것을
+                잡아냈습니다: 도그푸딩 검증은 &quot;세 가지 신호를 모두
+                확인하라&quot;고 설파하는 스킬이 정작 아무것도 확인하지 않는
+                표준 스니펫을 배포하고 있음을 발견했고, Codex 봇은 읽기 전용
+                기본값이 실제로는 읽기 전용이 아님을 발견했으며,
+                <code>agy</code>는 강화된 버전조차 저장소 자체의 훅이 셸 명령을
+                실행하도록 허용하고 있음을 발견했습니다.
+              </p>
+              <p class="retro">
+                관통하는 흐름은, 여기서 고친 모든 것이 &lsquo;사실인 것처럼
+                진술된 가정&rsquo;에서 시작되었다는 점입니다.
+                <code>--allowedTools</code>는 샌드박스처럼 들렸기 때문에 그렇게
+                문서화되었습니다. 리뷰어의 주장을 받아들이거나 기각하는 대신
+                직접 재현해본 것이 그것을 명확한 경계로 바꾸어 놓았습니다.
+                앞으로 이어갈 점: 문서에서 스니펫을 그대로 추출해 실행할 것(다시
+                타이핑한 사본은 문서의 결함을 조용히 고쳐버립니다), 그리고
+                &lsquo;거부됨&rsquo;과 &lsquo;제공되지 않음&rsquo;을 서로 다른
+                상태로 취급할 것 &mdash; <code>.permission_denials</code>는
+                거부만 기록하므로, 서브에이전트가 과도한 권한을 가졌는지는 결코
+                알려주지 않습니다.
               </p>
             </section>
           </article>

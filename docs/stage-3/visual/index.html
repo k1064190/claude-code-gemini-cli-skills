@@ -190,6 +190,13 @@
         color: var(--accent);
       }
 
+      .field h5 {
+        margin: 1.25rem 0 0.5rem;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text);
+      }
+
       .field p,
       .field ul,
       .field ol {
@@ -430,6 +437,32 @@
                           signal.
                         </td>
                       </tr>
+                      <tr>
+                        <td data-label="Finding">
+                          <code>--allowedTools</code> is not a sandbox. It
+                          suppresses prompts; it does not remove tools. Unlisted
+                          tools fall through to the ambient permission mode, and
+                          a project&rsquo;s own settings/hooks run outside the
+                          tool boundary altogether.
+                        </td>
+                        <td data-label="Evidence">
+                          Against a repo whose
+                          <code>.claude/settings.json</code> set
+                          <code>defaultMode: bypassPermissions</code>, a
+                          &quot;read-only&quot; call with
+                          <code>--allowedTools "Read,Glob,Grep"</code> was
+                          offered
+                          <strong
+                            >32 tools, edited the file, and reported
+                            <code>permission_denials: 0</code></strong
+                          >. A <code>PreToolUse</code> hook in that repo
+                          <strong>executed a shell command</strong> during the
+                          run. The bound needs four flags: <code>--tools</code>,
+                          <code>--permission-mode dontAsk</code>,
+                          <code>--setting-sources user</code>,
+                          <code>--strict-mcp-config</code>.
+                        </td>
+                      </tr>
                     </tbody>
                   </table>
                 </li>
@@ -570,14 +603,66 @@
                   </tr>
                 </tbody>
               </table>
+
+              <h5>Codex GitHub bot (PR #6)</h5>
+              <ul>
+                <li>
+                  <strong
+                    >Round 1 &mdash; 9 findings, all valid, all fixed.</strong
+                  >
+                  One theme dominated: the snippets detected a failure and then
+                  printed <code>.result</code> anyway and exited 0, so an
+                  orchestrator could not branch on the exit status. They now
+                  report the diagnosis on stderr and <code>exit 1</code> on any
+                  of the three signals. Also: <code>--tools</code>
+                  corrected (built-ins only; MCP needs
+                  <code>--disallowedTools "mcp__*"</code> /
+                  <code>--strict-mcp-config</code>), the <code>--bare</code>
+                  precondition broadened past
+                  <code>ANTHROPIC_API_KEY</code> to the other documented
+                  non-OAuth sources, and the model policy stopped licensing a
+                  silent cost-based downgrade.
+                </li>
+                <li>
+                  <strong
+                    >Round 2 &mdash; 3 findings, and the P2 was the most
+                    valuable review comment of the stage.</strong
+                  >
+                  It claimed the read-only default was not read-only.
+                  Reproducing it was worse than the claim (see the table above),
+                  and the fix is the four-flag bound.
+                </li>
+                <li>
+                  <strong>Round 3 &mdash; never ran.</strong> The bot replied
+                  &quot;You have reached your Codex usage limits for code
+                  reviews.&quot; So the round-2 permission-model change carries
+                  no Codex sign-off; it was reviewed locally instead (<code
+                    >code-reviewer</code
+                  >
+                  found the Quick Reference rows had dropped
+                  <code>--permission-mode dontAsk</code>; <code>agy</code> found
+                  the project-hook escape hatch that
+                  <code>--setting-sources user</code> closes, and its &quot;jq
+                  crashes on a truncated <code>$OUT</code>&quot; finding was
+                  <strong>dismissed</strong> &mdash; the
+                  <code>[ -z "$LAST" ] && LAST='{}'</code> guard already handles
+                  it, as the timeout test shows).
+                </li>
+              </ul>
+
               <p>
                 <strong>Blocked, reported, not fixed here:</strong> the
                 <code>codex-subagent</code> default from stage 2,
-                <code>gpt-5.6-sol</code>, is now rejected outright (400
-                &quot;not supported when using Codex with a ChatGPT
-                account&quot;, codex-cli 0.144.3); <code>gpt-5.5</code> works
-                and was used for the codex review above. Fixing the stage-2
-                default is out of scope for this stage.
+                <code>gpt-5.6-sol</code>, is now rejected outright &mdash;
+                <code
+                  >400 &hellip; "The 'gpt-5.6-sol' model is not supported when
+                  using Codex with a ChatGPT account"</code
+                >
+                (codex-cli 0.144.3, and it is also the default in
+                <code>~/.codex/config.toml</code>). <code>gpt-5.5</code> works,
+                and the local codex review above ran on it. Fixing the stage-2
+                default is out of scope for this stage and needs its own
+                decision.
               </p>
             </section>
 
@@ -612,15 +697,30 @@
             <section class="field">
               <h4>Retrospective</h4>
               <p class="retro">
-                Two of the three headline findings contradict the official
-                documentation, and neither was discoverable by reading &mdash;
-                the JSON-array shape and the exit-0 failures only appear when
-                you run the command and check the exit code. The dogfood pass
-                earned its cost: a skill that preaches &quot;check all three
-                signals&quot; shipped a canonical snippet checking none, and
-                only an outside reader caught it. Worth repeating: extract
-                snippets from the doc and execute them, rather than testing a
-                retyped copy that quietly fixes what the doc got wrong.
+                Most of the headline findings contradict the official
+                documentation, and none were discoverable by reading it &mdash;
+                the JSON-array shape, the exit-0 failures, and the permission
+                model all only appear when you run the command and inspect what
+                came back. The review layers each caught a different class, and
+                each caught something the others missed: the dogfood pass found
+                that a skill preaching &quot;check all three signals&quot;
+                shipped a canonical snippet checking none; the Codex bot found
+                that the read-only default was not read-only;
+                <code>agy</code> found that even the hardened version let a
+                repo&rsquo;s own hooks run shell commands.
+              </p>
+              <p class="retro">
+                The through-line is that every fix here started as an
+                <em>assumption stated as fact</em>. <code>--allowedTools</code>
+                sounded like a sandbox, so it was documented as one. Reproducing
+                the reviewer&rsquo;s claim &mdash; rather than accepting or
+                rejecting it &mdash; is what turned it into a bound. Carry
+                forward: extract snippets from the doc and execute them (a
+                retyped copy quietly fixes what the doc got wrong), and treat
+                &quot;denied&quot; and &quot;not offered&quot; as different
+                states &mdash;
+                <code>.permission_denials</code> only records denials, so it can
+                never tell you the subagent was over-privileged.
               </p>
             </section>
           </article>
