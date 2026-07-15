@@ -32,7 +32,7 @@ Capture stdout to a file (never pipe straight into `jq` — that replaces `claud
 
 ```bash
 ERRLOG=$(mktemp); OUT=$(mktemp)
-timeout -k 10 600 claude -p "your prompt here" \
+timeout -k 10 1200 claude -p "your prompt here" \
   --model opus \
   --tools "Read,Glob,Grep" \
   --allowedTools "Read,Glob,Grep" \
@@ -86,12 +86,12 @@ Other useful fields on the last event: `.session_id`, `.total_cost_usd`, `.num_t
    ```bash
    ERRLOG=$(mktemp); OUT=$(mktemp)
    set -o pipefail   # without it, a failing `git diff` is invisible and Claude just gets empty stdin
-   git diff main | timeout -k 10 600 claude -p "Review this diff for bugs." \
+   git diff main | timeout -k 10 1200 claude -p "Review this diff for bugs." \
      --model opus --output-format json >"$OUT" 2>"$ERRLOG"
    rc=$?   # the pipeline's status — with pipefail, non-zero if either git diff or claude failed
    ```
    Claude's stdout still goes to a file, not into a pipe, so `rc` is meaningful. Then apply the same three checks as the canonical block. Piped stdin is capped at 10 MB; for larger inputs, write a file and name its path in the prompt.
-2. **Wrap every call in `timeout -k`.** `timeout -k 10 600` sends SIGTERM at 10 min and SIGKILL 10 s later, so the call **cannot** hang indefinitely. Treat exit `124`/`137` as "timed out" and report it — do not silently retry. Raise the cap for large tasks; don't remove it.
+2. **Wrap every call in `timeout -k`.** `timeout -k 10 1200` sends SIGTERM at 20 min and SIGKILL 10 s later, so the call **cannot** hang indefinitely. Treat exit `124`/`137` as "timed out" and report it — do not silently retry. Raise the cap for large tasks; don't remove it.
 3. **Keep stderr, surface it on failure.** Capture with `2>"$ERRLOG"` (`ERRLOG=$(mktemp)` first) instead of `2>/dev/null`, and read it **before** any `rm`. On a clean run the log is empty; on a non-zero exit or empty stdout, `cat "$ERRLOG"` is where the real cause (auth, rate limit, network) shows up.
 4. **Never end a `claude -p` call with `| jq`.** The pipeline's exit code becomes jq's: a run killed by `timeout` feeds jq empty input, jq prints nothing and exits 0, and the caller cannot tell a timeout from a successful run with nothing to say. Redirect to a file, capture `rc`, then run `jq` against the file.
 
@@ -121,7 +121,7 @@ Unless a row says otherwise, assume the canonical block: `< /dev/null`, stdout t
 
 ```bash
 ERRLOG=$(mktemp); OUT=$(mktemp)
-timeout -k 10 600 claude -p "follow-up question" --resume "$SID" \
+timeout -k 10 1200 claude -p "follow-up question" --resume "$SID" \
   --output-format json < /dev/null >"$OUT" 2>"$ERRLOG"
 rc=$?
 
