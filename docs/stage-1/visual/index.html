@@ -257,6 +257,10 @@
             <span class="node-dot future"></span>
             <span class="node-label">Stage 2</span>
           </li>
+          <li class="timeline-node">
+            <span class="node-dot future"></span>
+            <span class="node-label">Stage 3</span>
+          </li>
         </ol>
       </nav>
 
@@ -342,6 +346,56 @@
                 files. Cross-checked against official codex docs and the
                 CLIs&rsquo; own <code>--help</code>.
               </p>
+            </section>
+
+            <section class="field">
+              <h4>Review loop</h4>
+              <p>
+                Three reviewers per CLAUDE.md: the
+                <code>code-reviewer-pro</code> subagent,
+                <code>codex</code> (GitHub bot on PR #3), and
+                <code>antigravity-subagent</code>/agy.
+              </p>
+              <ul>
+                <li>
+                  <strong>Round 1 (code-reviewer-pro + codex):</strong>
+                  convergent findings fixed &mdash; an undefined
+                  <code>$ERRLOG</code> in inline snippets (verified as a hard
+                  bash failure), inconsistent stderr handling in the parallel
+                  block, a <code>status</code> variable colliding with
+                  fish/zsh&rsquo;s read-only <code>$status</code> (renamed to
+                  <code>rc</code>), and a wrong &quot;resume takes no
+                  flags&quot; claim (corrected via <code>resume --help</code>).
+                  Codex&rsquo;s P2 on parallel <code>$ERRLOG</code> was
+                  addressed by making each parallel call self-contained.
+                  Dismissed with evidence: a codex <code>--add-dir</code> P2 and
+                  a claim about resume&rsquo;s stdin <code>-</code>
+                  handling, both disproven by targeted tests.
+                </li>
+                <li>
+                  <strong>Round 2 (agy review):</strong> running agy on the diff
+                  surfaced two real defects &mdash; the positional
+                  <code>resume --last</code> form was missing
+                  <code>&lt; /dev/null</code>, and resume examples still used
+                  <code>2&gt;/dev/null</code> against the new capture-stderr
+                  rule. Both fixed.
+                </li>
+                <li>
+                  <strong
+                    >The big one &mdash; agy&rsquo;s &quot;review takes 40
+                    minutes&quot; hang:</strong
+                  >
+                  pointing agy at <code>@final.diff</code> from a scratch
+                  directory made its agent launch a full <code>$HOME</code>
+                  <code>find</code> to locate the file;
+                  <code>timeout -k</code> killed agy but not that grandchild,
+                  which kept a <code>RESULT=$(&hellip;)</code> pipe open for ~40
+                  minutes (confirmed via
+                  <code>/proc/&lt;pid&gt;/fd</code> pipe-inode ownership). Fixed
+                  by capturing agy&rsquo;s stdout to a file instead of command
+                  substitution, and by never making agy hunt for files.
+                </li>
+              </ul>
             </section>
 
             <section class="field">

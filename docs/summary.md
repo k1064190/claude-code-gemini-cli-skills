@@ -5,3 +5,6 @@
 
 ## Stage 2 — codex default model bump to gpt-5.6-sol
 - [codex-default-gpt-5.6-sol](stage-2/codex-default-gpt-5.6-sol.md) — upgraded codex CLI to 0.144.1 and moved the skill + `~/.codex/config.toml` default from `gpt-5.5` to `gpt-5.6-sol`; documented the 5.6 tier list and the "bare `gpt-5.6` alias is rejected on ChatGPT-account auth" caveat.
+
+## Stage 3 — claude-subagent skill (`claude -p`)
+- [claude-subagent-skill](stage-3/claude-subagent-skill.md) — added a fourth subagent skill for Claude Code itself, verified against CLI 2.1.209 rather than the docs: `--bare` is unusable on subscription auth, `--output-format json` emits a JSON *array* (so the documented `jq -r '.result'` fails), a run can fail while exiting 0 (`.is_error`, `.permission_denials`), and `--allowedTools` is not a sandbox — a "read-only" subagent edited a file and ran a repo's hook until the bound became `--tools` + `--permission-mode dontAsk` + `--setting-sources user` + `--strict-mcp-config`.

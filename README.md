@@ -1,6 +1,6 @@
 # claude-code-gemini-cli-skills
 
-Claude Code skills for delegating tasks to external CLI agents — Google Antigravity (`agy`), Google Gemini, and OpenAI Codex — running as subagents.
+Claude Code skills for delegating tasks to CLI agents — Google Antigravity (`agy`), Google Gemini, OpenAI Codex, and Claude Code itself (`claude -p`) — running as subagents.
 
 > **Heads up:** Google is retiring the Gemini CLI (free tier ended 2026-06-18) in favor of the **Antigravity CLI** (`agy`). New work should prefer [`antigravity-subagent`](./antigravity-subagent/SKILL.md); `gemini-subagent` is kept for environments still on the old `gemini` binary.
 
@@ -33,6 +33,17 @@ Delegate tasks from Claude to OpenAI Codex CLI running as an independent agent. 
 - **Resumable sessions** — Continue prior Codex sessions with `codex exec resume --last`
 - **Sandboxed execution** — Run with `read-only`, `workspace-write`, or `danger-full-access` modes
 
+### [`claude-subagent`](./claude-subagent/SKILL.md)
+
+Delegate tasks to a fresh Claude Code CLI run (`claude -p`). Useful for:
+
+- **Clean context** — A cold instance reads the code without the current conversation's assumptions
+- **Scoped permissions** — `--tools` bounds which tools exist, `--permission-mode dontAsk` denies the rest, and `--setting-sources user` drops the target repo's own settings and hooks, which otherwise run shell commands outside the tool boundary
+- **Parallel execution** — Run several `claude -p` instances concurrently via parallel Bash calls
+- **Orchestration from other CLIs** — Codex or Antigravity can call Claude for a subtask
+
+Not a second opinion: the subagent is the same model family, so it shares your blind spots. Use `codex-subagent` or `antigravity-subagent` for a genuine cross-model check.
+
 ## Defaults
 
 These skills pin a single default model per agent and switch only when the user explicitly asks for a different one. This keeps behavior predictable across sessions:
@@ -40,6 +51,7 @@ These skills pin a single default model per agent and switch only when the user 
 - **Antigravity**: always invoke with `--model "Gemini 3.1 Pro (High)"`. Switch to a Flash, Claude, or GPT-OSS model only when the user explicitly requests it. Run `agy models` to see the exact strings available.
 - **Gemini**: always invoke with `-m pro` (`gemini-3.1-pro-preview`). Switch to `-m flash` only when the user explicitly requests speed/flash.
 - **Codex**: always invoke with model `gpt-5.6-sol` and reasoning effort `high`. Switch only when the user explicitly names a different model or effort (e.g., "use gpt-5.6-luna", "set effort to xhigh"). Always pass the explicit tier id — the bare `gpt-5.6` alias is rejected on ChatGPT-account auth.
+- **Claude**: always invoke with `--model opus` and **without `--bare`**. Bare mode never reads OAuth or the keychain, so on a subscription account it fails with `"Not logged in · Please run /login"`; it is safe only with a non-OAuth credential source (`ANTHROPIC_API_KEY`, an `apiKeyHelper` via `--settings`, or Bedrock / Google Cloud / Foundry credentials). Bound the tools with **`--tools` plus `--permission-mode dontAsk --setting-sources user`** — `--allowedTools` alone only suppresses prompts (under a permissive ambient mode an unlisted `Edit` or `Bash` just runs), and the target repo's own `.claude/settings.json` hooks execute shell commands outside the tool boundary unless the project settings are dropped. Switch to `sonnet`/`haiku` only when the user explicitly asks. Worth surfacing before a large fan-out: a trivial `opus` call still costs ~$0.40, since a non-bare run loads CLAUDE.md, plugins, and skills.
 
 ## Requirements
 
@@ -89,6 +101,20 @@ npm install -g @openai/codex
 codex
 ```
 
+### Claude subagent
+
+- [Claude Code](https://code.claude.com/docs/en/setup) installed and authenticated
+- `jq` for JSON parsing
+
+```bash
+# Verify the binary and the auth state
+claude --version
+claude auth status
+
+# Authenticate (one-time interactive login)
+claude auth login
+```
+
 ## Installation
 
 Copy the skill folders into your Claude Code skills directory:
@@ -97,6 +123,7 @@ Copy the skill folders into your Claude Code skills directory:
 cp -r antigravity-subagent ~/.claude/skills/
 cp -r gemini-subagent      ~/.claude/skills/
 cp -r codex-subagent       ~/.claude/skills/
+cp -r claude-subagent      ~/.claude/skills/
 ```
 
 Or symlink them:
@@ -105,6 +132,7 @@ Or symlink them:
 ln -s $(pwd)/antigravity-subagent ~/.claude/skills/antigravity-subagent
 ln -s $(pwd)/gemini-subagent      ~/.claude/skills/gemini-subagent
 ln -s $(pwd)/codex-subagent       ~/.claude/skills/codex-subagent
+ln -s "$(pwd)/claude-subagent"    ~/.claude/skills/claude-subagent
 ```
 
 ## Quick start
@@ -154,6 +182,48 @@ codex exec --skip-git-repo-check \
 echo "follow-up question" | codex exec --skip-git-repo-check resume --last 2>"$ERRLOG"
 ```
 
+### Claude
+
+```bash
+# Default invocation — opus, no --bare, read-only tools.
+# `< /dev/null` matters: claude -p waits for EOF whenever stdin carries data.
+# --output-format json emits a JSON *array* of events, so take the last one.
+ERRLOG=$(mktemp); OUT=$(mktemp)
+timeout -k 10 600 claude -p "Working directory: /path/to/project. Analyze the architecture and suggest improvements." \
+  --model opus \
+  --tools "Read,Glob,Grep" --allowedTools "Read,Glob,Grep" \
+  --permission-mode dontAsk --setting-sources user --strict-mcp-config \
+  --output-format json \
+  < /dev/null >"$OUT" 2>"$ERRLOG"
+rc=$?
+
+# A run can fail while exiting 0 — gate on all three signals before trusting .result
+LAST=$(jq -c 'if type=="array" then last else . end' "$OUT" 2>/dev/null)
+[ -z "$LAST" ] && LAST='{}'
+IS_ERR=$(printf '%s' "$LAST" | jq -r 'if .is_error == false then "false" else "true" end')
+DENIALS=$(printf '%s' "$LAST" | jq -r '(.permission_denials // []) | length')
+if [ "$rc" -ne 0 ] || [ "$IS_ERR" != false ] || [ "$DENIALS" != 0 ]; then
+  echo "FAILED — exit=$rc is_error=$IS_ERR denials=$DENIALS" >&2
+  printf '%s' "$LAST" | jq -r '.result // "(no result)"' >&2   # error text, not an answer
+  cat "$ERRLOG" >&2
+  rm -f "$OUT" "$ERRLOG"
+  exit 1
+fi
+
+printf '%s' "$LAST" | jq -r '.result'
+SID=$(printf '%s' "$LAST" | jq -r '.session_id')   # keep for --resume
+rm -f "$OUT" "$ERRLOG"
+```
+
+Two rules the snippet encodes, both learned the hard way:
+
+- **Never end a `claude -p` call with `| jq`.** The pipeline's exit code becomes jq's, so a run killed by `timeout` prints nothing and exits 0 — indistinguishable from a clean run with nothing to say. Redirect to a file, capture `rc`, then run `jq` against the file.
+- **Never fall through to `.result` after a failed gate, and never exit 0 on one.** The failure text (`"Not logged in · Please run /login"`, or an observed false `"DONE"` from a denied edit) is a plausible-looking string; printed on stdout it reads as the answer.
+
+`--resume "$SID"` continues the session and `git diff main | claude -p …` reviews a diff (a real pipe supplies EOF, so drop `< /dev/null` — and `set -o pipefail`, or a failing `git diff` silently becomes empty stdin). Both need the same gate; the runnable forms are in [`claude-subagent/SKILL.md`](./claude-subagent/SKILL.md).
+
+A `claude -p` run can fail while still exiting 0 — check `.is_error` (auth failures land in `.result` as text) and `.permission_denials` (a tool missing from `--allowedTools` is denied silently). See [`claude-subagent/SKILL.md`](./claude-subagent/SKILL.md).
+
 ## Models
 
 ### Antigravity
@@ -184,6 +254,17 @@ Run `agy models` for the exact, currently-installed strings (pass them verbatim 
 | `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex-spark`, `gpt-5.3-codex` | Only when the user explicitly names one. |
 
 Reasoning effort defaults to `high`; valid values are `xhigh`, `high`, `medium`, `low`, `minimal`. Override only on explicit user request.
+
+### Claude
+
+| `--model` value | When to use |
+|-----------------|-------------|
+| `opus` | **Default for every task.** |
+| `sonnet` | Balanced. Only when the user asks — for bulk or mechanical work, propose it and let them decide. |
+| `haiku` | Cheapest/fastest. Only when the user asks. |
+| `fable` | Only when the user explicitly asks for it. |
+
+Aliases resolve to the latest model in each family; full ids (`claude-opus-4-8`, `claude-sonnet-5`, `claude-haiku-4-5`) also work.
 
 ## Gemini key patterns
 
@@ -250,4 +331,5 @@ gemini --resume "$SESSION_ID" -p "follow-up" --yolo --output-format json 2>/dev/
 - Antigravity CLI (`agy`) v1.0.10
 - Gemini CLI v0.41.1
 - Codex CLI v0.130.0
+- Claude Code CLI v2.1.209 (`claude -p`, as both host and subagent)
 - Claude Code (Sonnet 4.6, Opus 4.7, Opus 4.8)
