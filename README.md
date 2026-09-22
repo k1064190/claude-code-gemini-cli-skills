@@ -1,6 +1,6 @@
 # claude-code-gemini-cli-skills
 
-Claude Code skills for delegating tasks to CLI agents — Google Antigravity (`agy`), Google Gemini, OpenAI Codex, and Claude Code itself (`claude -p`) — running as subagents.
+Cross-runtime Agent Skills for delegating tasks to CLI agents — Google Antigravity (`agy`), Google Gemini, OpenAI Codex, and Claude Code itself (`claude -p`) — running as subagents. The standard `SKILL.md` folders work with Codex and Claude Code.
 
 > **Heads up:** Google is retiring the Gemini CLI (free tier ended 2026-06-18) in favor of the **Antigravity CLI** (`agy`). New work should prefer [`antigravity-subagent`](./antigravity-subagent/SKILL.md); `gemini-subagent` is kept for environments still on the old `gemini` binary.
 
@@ -13,7 +13,16 @@ Delegate tasks from Claude to Google Antigravity CLI (`agy`), the Gemini CLI's s
 - **Large codebase analysis** — Antigravity's large context window handles entire repos that overflow Claude's context
 - **Multi-model second opinion** — One CLI fronts Gemini 3.x, Claude Sonnet/Opus 4.6, and GPT-OSS
 - **Parallel execution** — Run multiple `agy` instances concurrently via parallel Bash calls
-- **Plain-text output** — `agy -p` prints the final answer directly; no JSON/`jq` step
+- **Checked structured output** — JSON status, process exit, and permission diagnostics are all verified before accepting a response
+
+### [`gemini-writing-subagent`](./gemini-writing-subagent/SKILL.md)
+
+Use Gemini 3.8 Flash only for user-facing writing:
+
+- **Drafting and copy** — prose, email, summaries, outlines, titles
+- **Editing** — rewriting, proofreading, tone adjustment, copyediting
+- **Translation** — faithful translation that preserves terminology and formatting
+- **Isolation** — temporary working directory, sandboxed CLI, no project access or permission bypass
 
 ### [`gemini-subagent`](./gemini-subagent/SKILL.md)
 
@@ -48,7 +57,8 @@ Not a second opinion: the subagent is the same model family, so it shares your b
 
 These skills pin a single default model per agent and switch only when the user explicitly asks for a different one. This keeps behavior predictable across sessions:
 
-- **Antigravity**: always invoke with `--model "Gemini 3.1 Pro (High)"`. Switch to a Flash, Claude, or GPT-OSS model only when the user explicitly requests it. Run `agy models` to see the exact strings available.
+- **Antigravity**: use `--model gemini-3.1-pro-high`. Switch to a Flash, Claude, or GPT-OSS slug only when the user explicitly requests it. Run `agy models` to see the exact current slugs.
+- **Gemini writing**: use `gemini-3.8-flash-high`; only the High, Medium, or Low variants of Gemini 3.8 Flash are accepted, with no silent fallback.
 - **Gemini**: always invoke with `-m pro` (`gemini-3.1-pro-preview`). Switch to `-m flash` only when the user explicitly requests speed/flash.
 - **Codex**: always invoke with model `gpt-5.6-sol` and reasoning effort `high`. Switch only when the user explicitly names a different model or effort (e.g., "use gpt-5.6-luna", "set effort to xhigh"). Always pass the explicit tier id — the bare `gpt-5.6` alias is rejected on ChatGPT-account auth.
 - **Claude**: always invoke with `--model opus` and **without `--bare`**. Bare mode never reads OAuth or the keychain, so on a subscription account it fails with `"Not logged in · Please run /login"`; it is safe only with a non-OAuth credential source (`ANTHROPIC_API_KEY`, an `apiKeyHelper` via `--settings`, or Bedrock / Google Cloud / Foundry credentials). Bound the tools with **`--tools` plus `--permission-mode dontAsk --setting-sources user`** — `--allowedTools` alone only suppresses prompts (under a permissive ambient mode an unlisted `Edit` or `Bash` just runs), and the target repo's own `.claude/settings.json` hooks execute shell commands outside the tool boundary unless the project settings are dropped. Switch to `sonnet`/`haiku` only when the user explicitly asks. Worth surfacing before a large fan-out: a trivial `opus` call still costs ~$0.40, since a non-bare run loads CLAUDE.md, plugins, and skills.
@@ -58,6 +68,7 @@ These skills pin a single default model per agent and switch only when the user 
 ### Antigravity subagent
 
 - [Antigravity CLI](https://antigravity.google) (`agy`) installed and authenticated
+- `jq` for JSON status and response parsing
 - `tmux` (optional — only needed for explicit background execution)
 
 ```bash
@@ -74,6 +85,11 @@ agy --version
 # One-time: import existing Gemini CLI config as plugins (non-destructive)
 agy plugin import gemini
 ```
+
+### Gemini writing subagent
+
+- The Antigravity requirement above
+- Python 3.10 or newer for the isolated runner
 
 ### Gemini subagent
 
@@ -117,38 +133,71 @@ claude auth login
 
 ## Installation
 
-Copy the skill folders into your Claude Code skills directory:
+Copy the skill folders into `~/.agents/skills` for cross-runtime discovery, including Codex:
 
 ```bash
-cp -r antigravity-subagent ~/.claude/skills/
-cp -r gemini-subagent      ~/.claude/skills/
-cp -r codex-subagent       ~/.claude/skills/
-cp -r claude-subagent      ~/.claude/skills/
+cp -r antigravity-subagent    ~/.agents/skills/
+cp -r gemini-writing-subagent ~/.agents/skills/
+cp -r gemini-subagent         ~/.agents/skills/
+cp -r codex-subagent          ~/.agents/skills/
+cp -r claude-subagent         ~/.agents/skills/
 ```
 
 Or symlink them:
 
 ```bash
-ln -s $(pwd)/antigravity-subagent ~/.claude/skills/antigravity-subagent
-ln -s $(pwd)/gemini-subagent      ~/.claude/skills/gemini-subagent
-ln -s $(pwd)/codex-subagent       ~/.claude/skills/codex-subagent
-ln -s "$(pwd)/claude-subagent"    ~/.claude/skills/claude-subagent
+ln -s "$(pwd)/antigravity-subagent"    ~/.agents/skills/antigravity-subagent
+ln -s "$(pwd)/gemini-writing-subagent" ~/.agents/skills/gemini-writing-subagent
+ln -s "$(pwd)/gemini-subagent"         ~/.agents/skills/gemini-subagent
+ln -s "$(pwd)/codex-subagent"          ~/.agents/skills/codex-subagent
+ln -s "$(pwd)/claude-subagent"         ~/.agents/skills/claude-subagent
 ```
+
+Claude Code also discovers skills copied or linked under `~/.claude/skills`.
 
 ## Quick start
 
 ### Antigravity
 
 ```bash
-# Default invocation — always Gemini 3.1 Pro (High); plain-text output, no jq
-agy --model "Gemini 3.1 Pro (High)" -p "Working directory: /path/to/project. Analyze the architecture and suggest improvements." --dangerously-skip-permissions 2>/dev/null
+# Default invocation — Gemini 3.1 Pro High, sandboxed, JSON result
+OUT=$(mktemp); ERRLOG=$(mktemp)
+timeout -k 10 610 agy --model gemini-3.1-pro-high --sandbox \
+  --output-format json --print-timeout 10m \
+  -p "Analyze the architecture and suggest improvements." \
+  < /dev/null > "$OUT" 2> "$ERRLOG"
+rc=$?
+if [ "$rc" -ne 0 ] || ! jq -e \
+  '.status == "SUCCESS" and (.response | type == "string" and length > 0)' \
+  "$OUT" >/dev/null 2>&1; then
+  cat "$ERRLOG" >&2
+  rm -f "$OUT" "$ERRLOG"
+  exit 1
+fi
+if rg -qi 'soft[- ]denied|permission denied|requires approval|not allowed by policy' "$ERRLOG"; then
+  cat "$ERRLOG" >&2
+  rm -f "$OUT" "$ERRLOG"
+  exit 1
+fi
+jq -r '.response' "$OUT"
+rm -f "$OUT" "$ERRLOG"
 
-# Large codebase analysis (@ syntax, no --dangerously-skip-permissions needed)
+# Large codebase analysis with cwd-relative inclusion
 cd /path/to/project
-agy --model "Gemini 3.1 Pro (High)" -p "@src/ @tests/ Explain the architecture and identify missing test coverage" 2>/dev/null
+agy --model gemini-3.1-pro-high --sandbox --output-format json \
+  --print-timeout 10m -p "@src/ @tests/ Explain the architecture" \
+  < /dev/null > "$OUT" 2> "$ERRLOG"
+```
 
-# Continue the most recent conversation
-agy -c -p "follow-up question" --dangerously-skip-permissions 2>/dev/null
+See [`antigravity-subagent`](./antigravity-subagent/SKILL.md) for the complete exit/status/permission gates.
+
+### Gemini writing
+
+```bash
+python3 gemini-writing-subagent/scripts/run_gemini_writing.py \
+  --mode rewrite \
+  --instructions-file /absolute/path/to/instructions.txt \
+  --source /absolute/path/to/draft.md
 ```
 
 ### Gemini
@@ -228,15 +277,17 @@ A `claude -p` run can fail while still exiting 0 — check `.is_error` (auth fai
 
 ### Antigravity
 
-Run `agy models` for the exact, currently-installed strings (pass them verbatim to `--model`):
+Run `agy models` for the exact, currently-installed slugs (pass them verbatim to `--model`):
 
 | `--model` value | When to use |
 |-----------------|-------------|
-| `"Gemini 3.1 Pro (High)"` | **Default for every task.** |
-| `"Gemini 3.1 Pro (Low)"` | Pro quality, less reasoning budget. |
-| `"Gemini 3.5 Flash (Medium\|Low\|High)"` | Only when the user explicitly requests Flash/speed. |
-| `"Claude Sonnet 4.6 (Thinking)"`, `"Claude Opus 4.6 (Thinking)"` | Only when the user explicitly asks for Claude. |
-| `"GPT-OSS 120B (Medium)"` | Only when the user explicitly asks for GPT-OSS. |
+| `gemini-3.1-pro-high` | **Default for general Antigravity delegation.** |
+| `gemini-3.1-pro-low` | Pro quality, smaller reasoning budget; only when requested. |
+| `gemini-3.8-flash-high` | Default for the writing-only skill; general use only when requested. |
+| `gemini-3.8-flash-medium`, `gemini-3.8-flash-low` | Lower-effort 3.8 Flash; only when requested. |
+| `gemini-3.7-flash-*`, `gemini-3.6-flash-*` | Older Flash generations; only when explicitly requested. |
+| `claude-sonnet-4-6`, `claude-opus-4-6-thinking` | Only when the user explicitly asks for Claude. |
+| `gpt-oss-120b-medium` | Only when the user explicitly asks for GPT-OSS. |
 
 ### Gemini
 
@@ -328,7 +379,7 @@ gemini --resume "$SESSION_ID" -p "follow-up" --yolo --output-format json 2>/dev/
 
 ## Tested on
 
-- Antigravity CLI (`agy`) v1.0.10
+- Antigravity CLI (`agy`) v1.2.7
 - Gemini CLI v0.41.1
 - Codex CLI v0.130.0
 - Claude Code CLI v2.1.209 (`claude -p`, as both host and subagent)
