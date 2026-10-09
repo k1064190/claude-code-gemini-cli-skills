@@ -163,7 +163,7 @@ Constraints: {language, format, scope limits}
 A Claude subagent is the **same model family you are** — it shares your blind spots, so agreement is weak evidence. Do not treat "the subagent agreed" as confirmation.
 
 - Use it for **isolation** (clean context, scoped permissions, parallel work), not for a second opinion.
-- For a genuine cross-model check, use the `codex-subagent` or `antigravity-subagent` skills instead.
+- For a genuine cross-model check, use the `antigravity-subagent` skill, or the official Codex plugin's `/codex:*` commands in Claude Code, instead.
 - Verify claims about recent APIs, versions, or model names — the subagent has the same knowledge cutoff you do.
 
 ## Error Handling

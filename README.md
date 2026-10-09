@@ -1,6 +1,6 @@
 # claude-code-gemini-cli-skills
 
-Cross-runtime Agent Skills for delegating tasks to CLI agents — Google Antigravity (`agy`), Google Gemini, OpenAI Codex, and Claude Code itself (`claude -p`) — running as subagents. The standard `SKILL.md` folders work with Codex and Claude Code.
+Cross-runtime Agent Skills for delegating tasks to CLI agents — Google Antigravity (`agy`), Google Gemini, and Claude Code itself (`claude -p`) — running as subagents. The standard `SKILL.md` folders work with Codex and Claude Code.
 
 > **Heads up:** Google is retiring the Gemini CLI (free tier ended 2026-06-18) in favor of the **Antigravity CLI** (`agy`). New work should prefer [`antigravity-subagent`](./antigravity-subagent/SKILL.md); `gemini-subagent` is kept for environments still on the old `gemini` binary.
 
@@ -33,15 +33,6 @@ Delegate tasks from Claude to Gemini CLI running as an independent agent. Useful
 - **Google Search grounding** — Leverage Gemini's built-in web search
 - **Second opinion** — Compare results from two different AI models
 
-### [`codex-subagent`](./codex-subagent/SKILL.md)
-
-Delegate tasks from Claude to OpenAI Codex CLI running as an independent agent. Useful for:
-
-- **Code analysis and refactoring** — Hand off review, refactor, or automated edit work to Codex
-- **Cross-model second opinion** — Compare Codex's take against Claude's own conclusions
-- **Resumable sessions** — Continue prior Codex sessions with `codex exec resume --last`
-- **Sandboxed execution** — Run with `read-only`, `workspace-write`, or `danger-full-access` modes
-
 ### [`claude-subagent`](./claude-subagent/SKILL.md)
 
 Delegate tasks to a fresh Claude Code CLI run (`claude -p`). Useful for:
@@ -51,7 +42,7 @@ Delegate tasks to a fresh Claude Code CLI run (`claude -p`). Useful for:
 - **Parallel execution** — Run several `claude -p` instances concurrently via parallel Bash calls
 - **Orchestration from other CLIs** — Codex or Antigravity can call Claude for a subtask
 
-Not a second opinion: the subagent is the same model family, so it shares your blind spots. Use `codex-subagent` or `antigravity-subagent` for a genuine cross-model check.
+Not a second opinion: the subagent is the same model family, so it shares your blind spots. Use `antigravity-subagent` (or, inside Claude Code, the official Codex plugin's `/codex:*` commands) for a genuine cross-model check.
 
 ## Defaults
 
@@ -60,7 +51,6 @@ These skills pin a single default model per agent and switch only when the user 
 - **Antigravity**: use `--model gemini-3.1-pro-high`. Switch to a Flash, Claude, or GPT-OSS slug only when the user explicitly requests it. Run `agy models` to see the exact current slugs.
 - **Gemini writing**: use `gemini-3.8-flash-high`; only the High, Medium, or Low variants of Gemini 3.8 Flash are accepted, with no silent fallback.
 - **Gemini**: always invoke with `-m pro` (`gemini-3.1-pro-preview`). Switch to `-m flash` only when the user explicitly requests speed/flash.
-- **Codex**: always invoke with model `gpt-5.6-sol` and reasoning effort `high`. Switch only when the user explicitly names a different model or effort (e.g., "use gpt-5.6-luna", "set effort to xhigh"). Always pass the explicit tier id — the bare `gpt-5.6` alias is rejected on ChatGPT-account auth.
 - **Claude**: always invoke with `--model opus` and **without `--bare`**. Bare mode never reads OAuth or the keychain, so on a subscription account it fails with `"Not logged in · Please run /login"`; it is safe only with a non-OAuth credential source (`ANTHROPIC_API_KEY`, an `apiKeyHelper` via `--settings`, or Bedrock / Google Cloud / Foundry credentials). Bound the tools with **`--tools` plus `--permission-mode dontAsk --setting-sources user`** — `--allowedTools` alone only suppresses prompts (under a permissive ambient mode an unlisted `Edit` or `Bash` just runs), and the target repo's own `.claude/settings.json` hooks execute shell commands outside the tool boundary unless the project settings are dropped. Switch to `sonnet`/`haiku` only when the user explicitly asks. Worth surfacing before a large fan-out: a trivial `opus` call still costs ~$0.40, since a non-bare run loads CLAUDE.md, plugins, and skills.
 
 ## Requirements
@@ -105,18 +95,6 @@ npm install -g @google/gemini-cli
 gemini
 ```
 
-### Codex subagent
-
-- [Codex CLI](https://github.com/openai/codex) installed and authenticated
-
-```bash
-# Install Codex CLI
-npm install -g @openai/codex
-
-# Authenticate (one-time interactive login)
-codex
-```
-
 ### Claude subagent
 
 - [Claude Code](https://code.claude.com/docs/en/setup) installed and authenticated
@@ -139,7 +117,6 @@ Copy the skill folders into `~/.agents/skills` for cross-runtime discovery, incl
 cp -r antigravity-subagent    ~/.agents/skills/
 cp -r gemini-writing-subagent ~/.agents/skills/
 cp -r gemini-subagent         ~/.agents/skills/
-cp -r codex-subagent          ~/.agents/skills/
 cp -r claude-subagent         ~/.agents/skills/
 ```
 
@@ -149,7 +126,6 @@ Or symlink them:
 ln -s "$(pwd)/antigravity-subagent"    ~/.agents/skills/antigravity-subagent
 ln -s "$(pwd)/gemini-writing-subagent" ~/.agents/skills/gemini-writing-subagent
 ln -s "$(pwd)/gemini-subagent"         ~/.agents/skills/gemini-subagent
-ln -s "$(pwd)/codex-subagent"          ~/.agents/skills/codex-subagent
 ln -s "$(pwd)/claude-subagent"         ~/.agents/skills/claude-subagent
 ```
 
@@ -212,23 +188,6 @@ gemini -m pro -p "@src/ @tests/ Explain the overall architecture and identify an
 
 # Explicit speed mode — only when the user asks for it
 gemini -m flash -p "What is the capital of France?" --output-format json 2>/dev/null | jq -r '.response'
-```
-
-### Codex
-
-```bash
-# Default invocation — gpt-5.6-sol with high reasoning effort, read-only sandbox.
-# `< /dev/null` is required: without it codex can block forever on a non-TTY stdin.
-# Capture stderr to a file instead of discarding it (see codex-subagent/SKILL.md).
-ERRLOG=$(mktemp)
-codex exec --skip-git-repo-check \
-  -m gpt-5.6-sol \
-  --config model_reasoning_effort="high" \
-  --sandbox read-only \
-  "Review this diff for correctness and security issues." < /dev/null 2>"$ERRLOG"
-
-# Resume the most recent session (inherits model / effort / sandbox; echo | supplies EOF)
-echo "follow-up question" | codex exec --skip-git-repo-check resume --last 2>"$ERRLOG"
 ```
 
 ### Claude
@@ -296,16 +255,6 @@ Run `agy models` for the exact, currently-installed slugs (pass them verbatim to
 | `-m pro` | `gemini-3.1-pro-preview` | **Default for every task.** |
 | `-m flash` | `gemini-3-flash-preview` | Only when the user explicitly requests flash/speed. |
 
-### Codex
-
-| Model | When to use |
-|-------|-------------|
-| `gpt-5.6-sol` | **Default for every task.** (Flagship 5.6 tier; pass the explicit id, never the bare `gpt-5.6` alias.) |
-| `gpt-5.6-terra`, `gpt-5.6-luna` | Cheaper / fastest 5.6 tiers — only when the user explicitly names one. |
-| `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex-spark`, `gpt-5.3-codex` | Only when the user explicitly names one. |
-
-Reasoning effort defaults to `high`; valid values are `xhigh`, `high`, `medium`, `low`, `minimal`. Override only on explicit user request.
-
 ### Claude
 
 | `--model` value | When to use |
@@ -318,8 +267,6 @@ Reasoning effort defaults to `high`; valid values are `xhigh`, `high`, `medium`,
 Aliases resolve to the latest model in each family; full ids (`claude-opus-4-8`, `claude-sonnet-5`, `claude-haiku-4-5`) also work.
 
 ## Gemini key patterns
-
-For Codex-specific patterns (sandbox modes, resume semantics, when to push back on Codex output), see [`codex-subagent/SKILL.md`](./codex-subagent/SKILL.md).
 
 ### Get clean output (final answer only)
 
@@ -381,6 +328,5 @@ gemini --resume "$SESSION_ID" -p "follow-up" --yolo --output-format json 2>/dev/
 
 - Antigravity CLI (`agy`) v1.2.7
 - Gemini CLI v0.41.1
-- Codex CLI v0.130.0
 - Claude Code CLI v2.1.209 (`claude -p`, as both host and subagent)
 - Claude Code (Sonnet 4.6, Opus 4.7, Opus 4.8)
